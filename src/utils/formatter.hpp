@@ -7,7 +7,7 @@ class Formatter {
   Formatter(const Formatter &);
   Formatter & operator = (Formatter &);
  public:
-  Formatter() {}
+  Formatter() : _ss() {}
   ~Formatter() {}
 
   template <typename T>

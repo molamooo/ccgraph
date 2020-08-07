@@ -5,18 +5,18 @@ set(CMAKE_CXX_COMPILER "/usr/bin/g++")
 set(CMAKE_C_COMPILER "/usr/bin/gcc")
 
 SET(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -lgcov")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --std=c++17 -fPIC -Wall -D_GLIBCXX_USE_CXX11_ABI=0 -DCARES_STATICLIB -O2")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --std=c++17 -fPIC -Wall -D_GLIBCXX_USE_CXX11_ABI=0 -DCARES_STATICLIB -Wno-strict-aliasing -Wuninitialized -Wmaybe-uninitialized")
 
 set(CMAKE_BUILD_TYPE "Release")
 # set(CMAKE_BUILD_TYPE "Debug")
 
 # if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-#   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DDEBUG_OUTPUT")
+#   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0")
 # endif()
 
-# if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-#   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --coverage")
-# endif()
+if (CMAKE_BUILD_TYPE STREQUAL "Release")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g" )
+endif()
 
 set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/build/lib) 
 
@@ -34,6 +34,10 @@ include_directories(${PROJECT_SOURCE_DIR}/src/latch)
 include_directories(${PROJECT_SOURCE_DIR}/src/store)
 include_directories(${PROJECT_SOURCE_DIR}/src/utils)
 include_directories(${PROJECT_SOURCE_DIR}/src/graphstore)
+include_directories(${PROJECT_SOURCE_DIR}/src/transaction)
+include_directories(${PROJECT_SOURCE_DIR}/src/lock)
+include_directories(${PROJECT_SOURCE_DIR}/src/executor)
+include_directories(${PROJECT_SOURCE_DIR}/src/bench_query)
 
 # add_library(ccgraphcore ${DIR_SRCS})
 # add_library( SimpleGraphClient ${PROJECT_SOURCE_DIR}/client/sgclient.cc 
@@ -63,7 +67,14 @@ add_executable( AbitaryTesterMain ${PROJECT_SOURCE_DIR}/tester_main.cc)
 # add_executable( SimpleGraphServerTest 
 #                 ${PROJECT_SOURCE_DIR}/test/sgserver_test.cc)
 
-# target_link_libraries(AbitaryTesterMain       ccgraphcore)
+target_link_libraries(AbitaryTesterMain       folly)
+target_link_libraries(AbitaryTesterMain       event)
+target_link_libraries(AbitaryTesterMain       double-conversion)
+target_link_libraries(AbitaryTesterMain       glog)
+target_link_libraries(AbitaryTesterMain       gflags)
+target_link_libraries(AbitaryTesterMain       pthread)
+target_link_libraries(AbitaryTesterMain       dl)
+target_link_libraries(AbitaryTesterMain       boost_context)
 
 
 # target_link_libraries(GraphDBTest           GraphDB)

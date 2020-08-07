@@ -1,0 +1,40 @@
+# uint64, uint32, uint8, int64, string, double
+
+# node|Place
+# note that the label is writen in the file to load.
+node|City:Place|name:string|url:string
+node|Country:Place|name:string|url:string
+node|Continent:Place|name:string|url:string
+
+# node|Message
+node|Comment:Message|creationDate:uint64|locationIP:string|browserUsed:string|content:string|length:uint32|imageFile:string|language:string
+# note that the order is not the same in header file.
+node|Post:Message|creationDate:uint64|locationIP:string|browserUsed:string|content:string|length:uint32|imageFile:string|language:string
+
+# node|Organisation
+node|Company:Organisation|name:string|url:string
+node|University:Organisation|name:string|url:string
+
+node|Forum|title:string|creationDate:uint64
+
+# the email, language is seperated by ';'
+node|Person|firstName:string|lastName:string|gender:string|birthday:uint64|email:string|speaks:string|browserUsed:string|locationIP:string|creationDate:uint64
+
+node|Tag|name:string|url:string
+node|TagClass|name:string|url:string
+
+edge|containerOf
+edge|hasCreator
+edge|hasInterest
+edge|hasMember|joinDate:uint64
+edge|hasModerator
+edge|hasTag
+edge|hasType
+edge|isLocatedIn
+edge|isPartOf
+edge|isSubclassOf
+edge|knows|creationDate:uint64
+edge|likes|creationDate:uint64
+edge|replyOf
+edge|studyAt|classYear:uint32
+edge|workAt|workFrom:uint32

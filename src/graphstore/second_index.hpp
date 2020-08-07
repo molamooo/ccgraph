@@ -15,7 +15,7 @@ class SecondaryIndex {
       case kUINT64: _index = ConcurrentRangeIndex<uint64_t, ValT>(); break;
       case kDOUBLE: _index = ConcurrentRangeIndex<double, ValT>(); break;
       case kSTRING: _index = ConcurrentRangeIndex<std::string, ValT>(); break;
-      default: throw SchemaException("Unknown property type to be used on node index: %d", key_type);
+      default: throw SchemaException(Formatter() << "Unknown property type to be used on node index: " << key_type);
     }
   }
   template<typename KeyT>

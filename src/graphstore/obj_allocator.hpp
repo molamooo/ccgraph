@@ -26,7 +26,7 @@ class Allocator {
   std::unordered_map<label_t, boost::pool<>*> _pools_by_label;
   const SchemaManager & _sm;
  public:
-  Allocator(const SchemaManager & sm) : _sm(sm) {
+  Allocator(const SchemaManager & sm) : _pools(), _pools_by_label(), _sm(sm) {
     for (label_t l = sm.get_min_label(); l <= sm.get_max_label(); l++) {
       uint64_t size = sm.get_prop_size(l) + (sm.IsNode(l) ? sizeof(Node) : sizeof(Edge));
       if (_pools.find(size) != _pools.end()) continue;
@@ -38,10 +38,10 @@ class Allocator {
     }
   }
   void* Alloc(const label_t l) {
-    return _pools.at(l).malloc();
+    return _pools_by_label.at(l)->malloc();
   }
   void Free(const label_t l, void* ptr) {
-    _pools.at(l).free(ptr);
+    _pools_by_label.at(l)->free(ptr);
   }
   template<typename ValT>
   std::function<ValT*()> get_allocator(const label_t l) {
