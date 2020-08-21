@@ -141,6 +141,8 @@ class Worker {
         uint32_t d1 = *(uint32_t*)&l, d2 = *(uint32_t*)&r;
         return compare(d1, d2, op);
       }
+      // case Result::kSet: throw QueryException("no compare on set");
+      case Result::kSet: // fix: use string as set
       case Result::kSTRING: {
         if (ty2 != ty1) throw QueryException("Compare must be on same type");
         return StringServer::get()->compare(l, r, op);
@@ -170,7 +172,6 @@ class Worker {
         labeled_id_t id1(l), id2(r);
         return compare(l, r, op);
       }
-      case Result::kSet: throw QueryException("no compare on set");
       default: throw FatalException("Unreachable");
     }
   }
@@ -290,9 +291,9 @@ class Worker {
         case GroupByStep::kSum: dst_type = src_type; break;
         case GroupByStep::kFirst: dst_type = src_type; break;
         case GroupByStep::kMakeSet: {
-          // dst_type = Result::kSet;
+          dst_type = Result::kSet;
           // main_rst = (ResultItem)new std::unordered_set<ResultItem>;
-          dst_type = Result::kSTRING;
+          // dst_type = Result::kSTRING;
           break;
         }
       }
@@ -479,6 +480,8 @@ class Worker {
             hash_rst = hash_rst ^ std::hash<double>()(d1);
             break;
           }
+          // case Result::kSet: throw QueryException("no hash on set col"); 
+          case Result::kSet:  // fix: same as string
           case Result::kSTRING : // this is an unique id for each string
           case Result::kUINT8 :
           case Result::kUINT32 :
@@ -489,7 +492,6 @@ class Worker {
             hash_rst = hash_rst ^ std::hash<uint64_t>()(r);
             break;
           }
-          case Result::kSet: throw QueryException("no hash on set col");
         }
       }
       return hash_rst;
@@ -848,7 +850,7 @@ class Worker {
     ResultItem val = row.get(i, j);
     Result::ColumnType ty = row.get_type(j);
     if (ty == Result::kLabeledNodeId) {
-      // fixme: check that const step has the correct label
+      // fixed: check that const step has the correct label
       if (row.get_rows() != 1) {throw QueryException("is labeled node id is in result, the step must be a const step. The label should also be set");}
       return labeled_id_t(row.get(i, j), row.get_const_label());
     }
