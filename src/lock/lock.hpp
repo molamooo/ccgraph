@@ -7,9 +7,11 @@
 #include <shared_mutex>
 #include <atomic>
 #include <condition_variable>
+#include <iostream>
 
 
 
+std::atomic<uint64_t> locker_count(0);
 static bool WWaiterBlockR = true;
 enum DeadLockPolicy {
   kNoWait=0,
@@ -34,11 +36,20 @@ class AsyncRWLock {
   bool should_abort(CCContex* new_txn) {
     if (_dead_lock == kNoWait) return true;
     if (w_locker != nullptr) {
-      if (new_txn->timestamp > w_locker->timestamp) return true;
-      return false;
+      if (new_txn->timestamp > w_locker->timestamp) {
+        // std::cout << "abort " << new_txn->txn_id << " due to conflict: wlocker is "<<w_locker->txn_id << "\n";
+        return true;
+      } else {
+        return false;
+      }
+      return new_txn->txn_id > w_locker->txn_id;
     }
     for (CCContex* reader : r_locker) {
-      if (new_txn->timestamp > reader->timestamp) return true;
+      if (new_txn->timestamp > reader->timestamp) {
+        // std::cout << "abort " << new_txn->txn_id << " due to conflict: rlocker is "<<reader->txn_id << "\n";
+        return true;
+      }
+      if (new_txn->txn_id > reader->txn_id) return true;
     }
     return false;
   }
@@ -71,7 +82,7 @@ class AsyncRWLock {
         if (should_abort(ctx)) {
           lk.unlock();
           w_waiter--;
-          throw CCFail("abort due to conflict");
+          throw CCFail(Formatter() << "abort " << ctx->txn_id << " due to conflict: wlocker is "<<w_locker->txn_id);
         }
         _cv.wait(lk);
       }
@@ -81,6 +92,7 @@ class AsyncRWLock {
       r_locker.clear();
       wlocked = true;
       w_locker = ctx;
+      // locker_count.fetch_add(1);
       lk.unlock();
     } else {
       // directly obtain the lock
@@ -96,32 +108,44 @@ class AsyncRWLock {
       w_waiter--;
       wlocked = true;
       w_locker = ctx;
+      locker_count.fetch_add(1);
       lk.unlock();
     }
     
   }
-  bool TryWlock(CCContex* ctx) {
-    std::unique_lock<std::mutex> lk(_m);
-    if (w_locker == ctx) {
-      lk.unlock();
-      return true;
-    }
+  // bool TryWlock(CCContex* ctx) {
+  //   std::unique_lock<std::mutex> lk(_m);
+  //   if (w_locker == ctx) {
+  //     lk.unlock();
+  //     return true;
+  //   }
 
-    if (wlocked || reader > 0) {
-      lk.unlock(); return false;
-    }
-    wlocked = true;
-    w_locker = ctx;
-    lk.unlock();
-    return true;
-  }
+  //   if (wlocked || reader > 0) {
+  //     lk.unlock(); return false;
+  //   }
+  //   wlocked = true;
+  //   w_locker = ctx;
+  //   lk.unlock();
+  //   return true;
+  // }
   VFuture WlockAsync(CCContex* ctx) {
     auto p = VPromise();
     auto f = p.getFuture();
     // todo: use thread pool to do this
     std::thread([p=std::move(p), this, ctx]()mutable{
-      Wlock(ctx);
-      p.setValue();
+      p.setWith([this, ctx](){
+        Wlock(ctx);
+      });
+      // try {
+      //   Wlock(ctx);
+      //   p.setValue();
+      // } catch (std::exception & e) {
+      //   std::cout << "abort a txn:" << e.what() << "\n";
+      //   if (auto e_p = dynamic_cast<CCFail*>(&e)) {
+      //     std::cout << "this is a abort exception:" << e_p->what() << "\n";
+      //   }
+      //   p.setException(e);
+      // }
     }).detach();
     return f;
   }
@@ -130,6 +154,7 @@ class AsyncRWLock {
     if (locked_me(ctx) == false) throw FatalException("unlock without lock");
     wlocked = false;
     w_locker = nullptr;
+    locker_count.fetch_sub(1);
     lk.unlock();
     _cv.notify_one();
   }
@@ -148,31 +173,43 @@ class AsyncRWLock {
       _cv.wait(lk);
     }
     r_locker.push_back(ctx);
+    locker_count.fetch_add(1);
     reader++;
     lk.unlock();
   }
-  bool TryRlock(CCContex* ctx) {
-    std::unique_lock<std::mutex> lk(_m);
-    if (locked_me(ctx)) {
-      lk.unlock();
-      return true;
-    }
+  // bool TryRlock(CCContex* ctx) {
+  //   std::unique_lock<std::mutex> lk(_m);
+  //   if (locked_me(ctx)) {
+  //     lk.unlock();
+  //     return true;
+  //   }
 
-    if (wlocked || (WWaiterBlockR && w_waiter > 0)) {
-      lk.unlock(); return false;
-    }
-    r_locker.push_back(ctx);
-    reader++;
-    lk.unlock();
-    return true;
-  }
+  //   if (wlocked || (WWaiterBlockR && w_waiter > 0)) {
+  //     lk.unlock(); return false;
+  //   }
+  //   r_locker.push_back(ctx);
+  //   reader++;
+  //   lk.unlock();
+  //   return true;
+  // }
   VFuture RlockAsync(CCContex* ctx) {
     auto p = VPromise();
     auto f = p.getFuture();
     // todo: use thread pool to do this
     std::thread([p=std::move(p), this, ctx]()mutable{
-      Rlock(ctx);
-      p.setValue();
+      p.setWith([this, ctx](){
+        Rlock(ctx);
+      });
+      // try {
+      //   Rlock(ctx);
+      //   p.setValue();
+      // } catch (const std::exception & e) {
+      //   std::cout << "abort a txn:" << e.what() << "\n";
+      //   if (auto e_p = dynamic_cast<const CCFail*>(&e)) {
+      //     std::cout << "this is a abort exception:" << e_p->what() << "\n";
+      //   }
+      //   p.setException(e);
+      // }
     }).detach();
     return f;
   }
@@ -187,8 +224,9 @@ class AsyncRWLock {
         break;
       }
     }
+    locker_count.fetch_sub(1);
     lk.unlock();
-    _cv.notify_one();
+    _cv.notify_one(); // fixme: only notify one, what if notify reader but writer is waiting?
   }
  public:
   void Upgrade(CCContex* ctx) {
@@ -226,8 +264,19 @@ class AsyncRWLock {
     auto f = p.getFuture();
     // todo: use thread pool to do this
     std::thread([p=std::move(p), this, ctx]()mutable{
-      Upgrade(ctx);
-      p.setValue();
+      p.setWith([this, ctx](){
+        Upgrade(ctx);
+      });
+      // try {
+      //   Upgrade(ctx);
+      //   p.setValue();
+      // } catch (std::exception & e) {
+      //   std::cout << "abort a txn:" << e.what() << "\n";
+      //   if (auto e_p = dynamic_cast<CCFail*>(&e)) {
+      //     std::cout << "this is a abort exception:" << e_p->what() << "\n";
+      //   }
+      //   p.setException(e);
+      // }
     }).detach();
     return f;
   }

@@ -962,45 +962,46 @@ class Worker {
     std::tuple<internal_id_t, label_t, size_t, size_t> rqst = step->pop_rqst();
     // LOG_VERBOSE("after pop rqst, the  rqst is %llu", std::get<0>(rqst));
 
+    return _ccgraph->GetAllNeighbour(step->get_label(), std::get<0>(rqst), step->get_dir(), step->get_cc_ctx())
+      // .via(folly::getGlobalCPUExecutor())
+      .thenValue([this, step, rqst, prev](std::shared_ptr<std::vector<Node*>> rst){
+        size_t depth=std::get<2>(rqst)+1;
+        size_t src_row = std::get<3>(rqst);
+        for (Node* n : *rst) {
+          if (step->should_place_to_rst(n, depth, src_row)) {
+            step->get_rst().append_row(src_row, prev->get_rst());
+            step->get_rst().set(step->get_rst().get_rows()-1, step->get_col_to_put(), (ResultItem)n);
+            step->get_rst().set(step->get_rst().get_rows()-1, step->get_col_to_put(1), depth);
+          }
+          if (step->terminate(n, depth) == false) {
+            // duplicated request is handled inside
+            step->append_rqst(n->_internal_id, n->_type, depth, src_row);
+          }
+        }
+        if (step->has_rqst()) {
+            return GetAllNeighbourVarLenCore(step);
+          // });
+        }
+        return folly::makeFuture();
+      });
 
-    // return std::move(f).thenValue([this, step, rqst](folly::Unit){ 
-    //   return _ccgraph->GetAllNeighbour(step->get_label(), std::get<0>(rqst), step->get_dir(), step->get_cc_ctx());
-    // }).thenValue([this, step, rqst, prev](sptr<std::vector<Node*>> rst){
-    //   size_t depth=std::get<2>(rqst)+1;
-    //   size_t src_row = std::get<3>(rqst);
-    //   for (Node* n : *rst) {
-    //     if (step->should_place_to_rst(n, depth)) {
-    //       step->get_rst().append_row(src_row, prev->get_rst());
-    //       step->get_rst().set(step->get_rst().get_rows()-1, step->get_col_to_put(), (ResultItem)n);
-    //       step->get_rst().set(step->get_rst().get_rows()-1, step->get_col_to_put(1), depth);
-    //     }
-    //     if (step->terminate(n, depth) == false) {
-    //       // duplicated request is handled inside
-    //       step->append_rqst(n->_internal_id, n->_type, depth, src_row);
-    //     }
+
+    // auto rst = _ccgraph->GetAllNeighbour(step->get_label(), std::get<0>(rqst), step->get_dir(), step->get_cc_ctx()).wait().get();
+    // size_t depth=std::get<2>(rqst)+1;
+    // size_t src_row = std::get<3>(rqst);
+    // for (Node* n : *rst) {
+    //   if (step->should_place_to_rst(n, depth, src_row)) {
+    //     step->get_rst().append_row(src_row, prev->get_rst());
+    //     step->get_rst().set(step->get_rst().get_rows()-1, step->get_col_to_put(), (ResultItem)n);
+    //     step->get_rst().set(step->get_rst().get_rows()-1, step->get_col_to_put(1), depth);
     //   }
-    //   if (step->has_rqst()) return GetAllNeighbourVarLenCore(step);
-    //   return folly::makeFuture();
-    // });
-
-
-    // fixme
-    auto rst = _ccgraph->GetAllNeighbour(step->get_label(), std::get<0>(rqst), step->get_dir(), step->get_cc_ctx()).wait().get();
-    size_t depth=std::get<2>(rqst)+1;
-    size_t src_row = std::get<3>(rqst);
-    for (Node* n : *rst) {
-      if (step->should_place_to_rst(n, depth, src_row)) {
-        step->get_rst().append_row(src_row, prev->get_rst());
-        step->get_rst().set(step->get_rst().get_rows()-1, step->get_col_to_put(), (ResultItem)n);
-        step->get_rst().set(step->get_rst().get_rows()-1, step->get_col_to_put(1), depth);
-      }
-      if (step->terminate(n, depth) == false) {
-        // duplicated request is handled inside
-        step->append_rqst(n->_internal_id, n->_type, depth, src_row);
-      }
-    }
-    if (step->has_rqst()) return GetAllNeighbourVarLenCore(step);
-    return folly::makeFuture();
+    //   if (step->terminate(n, depth) == false) {
+    //     // duplicated request is handled inside
+    //     step->append_rqst(n->_internal_id, n->_type, depth, src_row);
+    //   }
+    // }
+    // if (step->has_rqst()) return GetAllNeighbourVarLenCore(step);
+    // return folly::makeFuture();
 
   }
   VFuture ProcGetAllNeigbhourVarLen(QueryStep* _step_) {
@@ -1359,45 +1360,25 @@ class Worker {
     return f;
   }
   VFuture ProcessStepRecursive(QueryStep* step) {
-    // return ProcessOneStep(step)
-    //   .thenValue([this, step](folly::Unit){
-    //     LOG_VERBOSE("one step done; step");
-    //     if (Config::get()->print_mid_rst) {
-    //       LOG_VERBOSE("printing mid result");
-    //       step->get_rst().print();
-    //     }
-    //     size_t nexts = step->get_next_count();
-    //     if (nexts > 1) {
-    //       LOG_ERROR("More than one next, not supported");
-    //       throw Unimplemented("Sequential execution");
-    //     } else if (nexts == 0) {
-    //       LOG_VERBOSE("no more next steps");
-    //       return folly::makeFuture();
-    //     }
-    //     LOG_VERBOSE("running next step");
-    //     QueryStep* next_step = step->get_next(0);
-    //     return ProcessStepRecursive(next_step);
-    //   });
-
-    // fixme
-    auto f = ProcessOneStep(step).wait();
-    // LOG_VERBOSE("one step done");
-    if (Config::get()->print_mid_rst) {
-      LOG_VERBOSE("printing mid result");
-      step->get_rst().print();
-    }
-    size_t nexts = step->get_next_count();
-    if (nexts > 1) {
-      LOG_ERROR("More than one next, not supported");
-      throw Unimplemented("Sequential execution");
-    } else if (nexts == 0) {
-      LOG_VERBOSE("no more next steps");
-      return folly::makeFuture();
-    }
-    // LOG_VERBOSE("running next step");
-    QueryStep* next_step = step->get_next(0);
-    ProcessStepRecursive(next_step).wait();
-    return folly::makeFuture();
+    return ProcessOneStep(step)
+      // .via(folly::getGlobalCPUExecutor())
+      .thenValue([this, step](folly::Unit){
+        if (Config::get()->print_mid_rst) {
+          LOG_VERBOSE("printing mid result");
+          step->get_rst().print();
+        }
+        size_t nexts = step->get_next_count();
+        if (nexts > 1) {
+          LOG_ERROR("More than one next, not supported");
+          throw Unimplemented("Sequential execution");
+        } else if (nexts == 0) {
+          LOG_VERBOSE("no more next steps");
+          return folly::makeFuture();
+        }
+        // LOG_VERBOSE("running next step");
+        QueryStep* next_step = step->get_next(0);
+        return ProcessStepRecursive(next_step);
+      });
   }
   VFuture ProcessQuery(std::shared_ptr<Query> q) {
     // the initial point of processing a query, no reentrant
@@ -1424,7 +1405,6 @@ class Worker {
           // todo: exit gracefully
           exit(1);
         }
-        throw e;
       });
   }
 };

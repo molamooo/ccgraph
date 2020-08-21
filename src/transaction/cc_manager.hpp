@@ -81,18 +81,20 @@ class CCManager2PL : public CCManager {
     // LOG_VERBOSE("locking %llu with share=%d", hashed, share);
     int state = ctx->Locked(hashed);
     if (state == 0) {
-      // return _locks->GetLock(hashed).LockAsync(share, ctx).via(folly::getGlobalCPUExecutor());
-      // fixme
-      _locks->GetLock(hashed).Lock(share, ctx);
-      return folly::makeFuture();
+      return _locks->GetLock(hashed).LockAsync(share, ctx)
+        .via(folly::getGlobalCPUExecutor())
+        .thenValue([this, hashed, share, ctx](folly::Unit){
+          ctx->_lock_history[hashed] = share;
+        });
     }
     if (state == 2 || share) {
-      return folly::makeFuture();
+      return folly::makeFuture().via(folly::getGlobalCPUExecutor());
     }
-    // return _locks->GetLock(hashed).UpgradeAsync(ctx).via(folly::getGlobalCPUExecutor());
-    // fixme
-    _locks->GetLock(hashed).Upgrade(ctx);
-    return folly::makeFuture();
+    return _locks->GetLock(hashed).UpgradeAsync(ctx)
+      .via(folly::getGlobalCPUExecutor())
+      .thenValue([this, hashed, share, ctx](folly::Unit){
+        ctx->_lock_history[hashed] = share;
+      });
   }
   VFuture GrantAccessNProp(
       const labeled_id_t n_id, const bool share, CCContex* ctx) {
@@ -139,7 +141,6 @@ class CCManager2PL : public CCManager {
     // share on node
     // LOG_VERBOSE("get node via labeled id: label=%d,id.label=%d, id.id=%llu", label, labeled_id.label, labeled_id.id);
     return GrantAccessNProp(labeled_id, true, ctx).thenValue([this, label, labeled_id, ctx](folly::Unit)->Node*{
-      // fixme
       Node* node = _node_index->GetNodeViaLabeledId(label, labeled_id);
       if (node == nullptr) return nullptr;
       if (ctx->_org_nodes.find(node->_internal_id) != ctx->_org_nodes.end()) {
@@ -471,38 +472,27 @@ class CCManager2PL : public CCManager {
     if (n == nullptr) throw FatalException("Internal id does not exist");
     // LOG_VERBOSE("get all neighbour of label=%d, ex_id=%d, in_id=%llu,", label, n->_external_id.id, in_id.id);
     auto node_list = std::make_shared<std::vector<Node*>>();
-    // auto f = GrantAccessAdjIdx(label, n->_external_id, dir, true, ctx).wait()
-    //   .thenValue([this, label, in_id, dir, ctx, node_list](folly::Unit){
-    //     _edge_index->GetAllNeighbour(label, in_id, dir, *node_list);
+    return GrantAccessAdjIdx(label, n->_external_id, dir, true, ctx)
+      .thenValue([this, label, in_id, dir, ctx, node_list](folly::Unit){
+        _edge_index->GetAllNeighbour(label, in_id, dir, *node_list);
 
-    //     auto f1 = folly::makeFuture();
-    //     for (Node* n : *node_list) {
-    //       f1 = std::move(f1).thenValue([this, n, ctx](folly::Unit){
-    //         return GrantAccessNProp(n->_external_id, true, ctx);
-    //       });
-    //     }
-    //     return f1;
-    //   }).thenValue([node_list](folly::Unit){
-    //     return node_list;
-    //   });
-    // return f;
-
-    // fixme:
-    auto f = GrantAccessAdjIdx(label, n->_external_id, dir, true, ctx).wait().get();
-    // LOG_VERBOSE("%x", &f);
-    _edge_index->GetAllNeighbour(label, in_id, dir, *node_list);
-    for (Node* n : *node_list) {
-      auto f = GrantAccessNProp(n->_external_id, true, ctx).wait().get();
-    }
-    // LOG_VERBOSE("get all neighbour, result size is %llu", node_list->size());
-    return node_list;
+        auto f1 = folly::makeFuture();
+        for (Node* n : *node_list) {
+          f1 = std::move(f1).thenValue([this, n, ctx](folly::Unit){
+            return GrantAccessNProp(n->_external_id, true, ctx);
+          });
+        }
+        return f1;
+      }).thenValue([node_list](folly::Unit){
+        return node_list;
+      });
   }
   bool CommitCheck(CCContex* ctx) {
     return true;
   }
   void Commit(CCContex* ctx) {
     for (auto iter : ctx->_lock_history) {
-      _locks->GetLock(iter.first).Unlock(!iter.second, ctx);
+      _locks->GetLock(iter.first).Unlock(iter.second, ctx);
     }
     for (auto iter : ctx->_org_nodes) {
       if (iter.second == nullptr) {
@@ -546,6 +536,8 @@ class CCManager2PL : public CCManager {
       }
       _allocator->Free(iter.second->_label, iter.second);
     }
-
+    for (auto iter : ctx->_lock_history) {
+      _locks->GetLock(iter.first).Unlock(iter.second, ctx);
+    }
   }
 };

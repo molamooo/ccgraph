@@ -8,7 +8,7 @@
 
 class CCContex {
  public:
-  // true for exclusive, false for share
+  // false for exclusive, true for share
   std::unordered_map<uint64_t, bool> _lock_history;
   // for 2pl: read history is not placed here. only the original version of those record wrotten 
   std::unordered_map<internal_id_t, Node*> _org_nodes;
@@ -20,6 +20,6 @@ class CCContex {
       return 0;
     }
     // 2 for exclusive, 1 for share
-    return (iter->second) ? 2 : 1;
+    return (iter->second) ? 1 : 2;
   }
 };
