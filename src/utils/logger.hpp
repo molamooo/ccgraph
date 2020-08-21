@@ -74,7 +74,7 @@ static bool lineWrap        = true;             // Default setting for line wrap
 // Private function prototypes
 static char* getDateString();
 static char** getPrettyBacktrace( void* addresses[], int array_size );
-static void wrapLines( char* msg, int msgSize );
+// static void wrapLines( char* msg, int msgSize );
 
 /*
     Writes output to defined logfile and standard out/err with
@@ -524,7 +524,7 @@ void loadConfig( const char* config ) {
             strncpy( val, settingsBuffer + splitL, endL - splitL );
 
             // Parse the value if it is a boolean
-            bool boolVal;
+            bool boolVal=false;
             if( strcmp( val, "true" ) == 0 ) {
                 boolVal = true;
             } else if( strcmp( val, "false" ) == 0 ) {
@@ -717,79 +717,79 @@ static char** getPrettyBacktrace( void* addresses[], int array_size ) {
     char* msg    - The message variable to wrap
     int msgSize  - The maximum message size
  */
-static void wrapLines( char* msg, int msgSize ) {
-    // used to ensure consistent alignment between terminal and log file
-    char* indentedLineSpacing = (char*)malloc( 32 );
-    memset( indentedLineSpacing, ' ', 32 );
-    indentedLineSpacing[30] = '\t';
-    indentedLineSpacing[31] = 0;
+// static void wrapLines( char* msg, int msgSize ) {
+//     // used to ensure consistent alignment between terminal and log file
+//     char* indentedLineSpacing = (char*)malloc( 32 );
+//     memset( indentedLineSpacing, ' ', 32 );
+//     indentedLineSpacing[30] = '\t';
+//     indentedLineSpacing[31] = 0;
 
-    // Temp buffer to hold the newly constructed message
-    char tempBuf[msgSize];
-    memset( tempBuf, 0, msgSize );
+//     // Temp buffer to hold the newly constructed message
+//     char tempBuf[msgSize];
+//     memset( tempBuf, 0, msgSize );
 
-    // Used to keep track of how much is read from message for each line
-    int lineFeedSize = 80;
+//     // Used to keep track of how much is read from message for each line
+//     int lineFeedSize = 80;
 
-    // copy first 80 characters from message
-    strncpy( tempBuf, msg, lineFeedSize );
+//     // copy first 80 characters from message
+//     strncpy( tempBuf, msg, lineFeedSize );
 
-    // Iterate through the message to wrap all lines
-    for( size_t i = lineFeedSize; i < strlen( msg ); i += lineFeedSize ) {
-        // Check if the current line (including whitespace) is over 80 characters
-        if( strlen( msg + i ) + strlen( indentedLineSpacing ) > 80 ) {
-            // Get the position of the last space in the line
-            char* returnPos = strrchr( tempBuf, ' ' );
-            // Replace the space with a newline
-            returnPos[0] = '\n';
+//     // Iterate through the message to wrap all lines
+//     for( size_t i = lineFeedSize; i < strlen( msg ); i += lineFeedSize ) {
+//         // Check if the current line (including whitespace) is over 80 characters
+//         if( strlen( msg + i ) + strlen( indentedLineSpacing ) > 80 ) {
+//             // Get the position of the last space in the line
+//             char* returnPos = strrchr( tempBuf, ' ' );
+//             // Replace the space with a newline
+//             returnPos[0] = '\n';
 
-            // Temp buffer to store the text after the space
-            char wrapText[255];
-            // Copy the text that was after the space into the buffer
-            strcpy( wrapText, returnPos + 1 );
+//             // Temp buffer to store the text after the space
+//             char wrapText[255];
+//             // Copy the text that was after the space into the buffer
+//             strcpy( wrapText, returnPos + 1 );
 
-            // Write indent spacing for this line, and append the
-            // wrapped text from after the space
-            sprintf( returnPos + 1, "%s%s", indentedLineSpacing, wrapText );
+//             // Write indent spacing for this line, and append the
+//             // wrapped text from after the space
+//             sprintf( returnPos + 1, "%s%s", indentedLineSpacing, wrapText );
 
-            // Calculate how much to copy in from the message
-            lineFeedSize = ( strlen( msg + i ) < 80 ? strlen( msg + i ) : 80 )  - strlen( indentedLineSpacing ) - strlen( wrapText );
-            // Copy from the message
-            strncpy( returnPos + strlen( returnPos ), msg + i, lineFeedSize );
-        } else if( strlen( strrchr( tempBuf, '\n' ) ) + strlen( msg + i ) > 80  ) {
-            // Get the position of the last space in the line
-            char* returnPos = strrchr( tempBuf, ' ' );
-            // Replace the space with a newline
-            returnPos[0] = '\n';
+//             // Calculate how much to copy in from the message
+//             lineFeedSize = ( strlen( msg + i ) < 80 ? strlen( msg + i ) : 80 )  - strlen( indentedLineSpacing ) - strlen( wrapText );
+//             // Copy from the message
+//             strncpy( returnPos + strlen( returnPos ), msg + i, lineFeedSize );
+//         } else if( strlen( strrchr( tempBuf, '\n' ) ) + strlen( msg + i ) > 80  ) {
+//             // Get the position of the last space in the line
+//             char* returnPos = strrchr( tempBuf, ' ' );
+//             // Replace the space with a newline
+//             returnPos[0] = '\n';
 
-            // Temp buffer to store the text after the space
-            char wrapText[255];
-            // Copy the text that was after the space into the buffer
-            strcpy( wrapText, returnPos + 1 );
+//             // Temp buffer to store the text after the space
+//             char wrapText[255];
+//             // Copy the text that was after the space into the buffer
+//             strcpy( wrapText, returnPos + 1 );
 
-            // Write indent spacing for this line, and append the
-            // wrapped text from after the space
-            sprintf( returnPos + 1, "%s%s", indentedLineSpacing, wrapText );
+//             // Write indent spacing for this line, and append the
+//             // wrapped text from after the space
+//             sprintf( returnPos + 1, "%s%s", indentedLineSpacing, wrapText );
 
-            // Copy from the message
-            strncpy( returnPos + strlen( returnPos ), msg + i, strlen( msg + i ) );
-        } else {
-            // Copy the last part of the messaage
-            strncpy( tempBuf + strlen( tempBuf ), msg + i, strlen( msg + i ) );
-        }
-    }
+//             // Copy from the message
+//             strncpy( returnPos + strlen( returnPos ), msg + i, strlen( msg + i ) );
+//         } else {
+//             // Copy the last part of the messaage
+//             strncpy( tempBuf + strlen( tempBuf ), msg + i, strlen( msg + i ) );
+//         }
+//     }
 
-    // Copy the new message back into the message variable
-    strncpy( msg, tempBuf, msgSize );
+//     // Copy the new message back into the message variable
+//     strncpy( msg, tempBuf, msgSize );
 
-    // Ensure there is a newline at the end of the new message
-    if( msg[strlen( msg ) - 1] != '\n' ) {
-        sprintf( msg + strlen( msg ), "\n" );
-    }
+//     // Ensure there is a newline at the end of the new message
+//     if( msg[strlen( msg ) - 1] != '\n' ) {
+//         sprintf( msg + strlen( msg ), "\n" );
+//     }
 
-    // Free the line spacing var
-    free( indentedLineSpacing );
-}
+//     // Free the line spacing var
+//     free( indentedLineSpacing );
+// }
 
 // Put all public functions into their own "namespace"
 simplog_namespace const simplog = { writeLog, writeStackTrace, setLogDebugLevel, setLogFile, setLogSilentMode, setLineWrap, flushLog, loadConfig };

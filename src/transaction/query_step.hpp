@@ -162,6 +162,7 @@ class PlacePropCol : public QueryStep {
  public:
   size_t _prop_idx = std::numeric_limits<size_t>::max();
   OperatorType get_type() { return OperatorType::kPlaceProp; };
+  // fixed: the prev is not useful?: must be 1, since we check the size of src_col
   size_t get_prev_count() { return 1; }
   size_t get_dst_col_count() { return 1; }
   // size_t get_next_count() { return _nexts.size(); }
@@ -176,7 +177,7 @@ class PlacePropColBack : public QueryStep {
   // std::vector<QueryStep*> _nexts;
  public:
   size_t _prop_idx = std::numeric_limits<size_t>::max();
-  OperatorType get_type() { return OperatorType::kPlaceProp; };
+  OperatorType get_type() { return OperatorType::kPlacePropBack; };
   size_t get_prev_count() { return 1; }
   size_t get_dst_col_count() { return 1; }
   // size_t get_next_count() { return _nexts.size(); }
@@ -359,7 +360,7 @@ class GetAllNeighbourVarLenStep : public QueryStep {
   void set_label(label_t l) { _label = l; }
   dir_t get_dir() const { return _dir; }
   void  set_dir(dir_t d) {_dir = d;}
-  // fixme: use touched to remove redundancy
+  // fixed: use touched to remove redundancy
   bool should_place_to_rst(Node* n, size_t depth, size_t src_row) {
     if (_place_to_rst(n, depth) == false) return false;
     if (_hist_rsts.find(std::make_tuple(n->_internal_id, src_row)) != _hist_rsts.end()) return false;
@@ -532,12 +533,15 @@ class DeleteNodeStep : public QueryStep {
 class CreateEdgeStep : public QueryStep {
  private:
   label_t _label;
+  dir_t _dir;
  public:
   inline OperatorType get_type() { return OperatorType::kCreateEdge; };
   inline size_t get_prev_count() { return 2; }
   size_t get_dst_col_count() { return 1; }
   label_t get_label() const { return _label; }
   void set_label(label_t l) { _label = l; }
+  dir_t get_dir() const { return _dir; }
+  void set_dir(dir_t d) { _dir = d; }
 };
 
 class UpdateEdgeStep : public QueryStep {

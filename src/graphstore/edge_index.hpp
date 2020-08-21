@@ -36,7 +36,7 @@ class EdgeIndex {
   Edge* GetEdge(const internal_id_t id1, const internal_id_t id2) {
     try {
       return _id_index_out.Read(id1)->Read(id2);
-    } catch (IndexException e) {
+    } catch (IndexException & e) {
       return nullptr;
     }
   }
@@ -62,7 +62,7 @@ class EdgeIndex {
       Edge* e = _id_index_out.Read(id1)->Delete(id2);
       _id_index_in.Read(id2)->Delete(id1);
       return e;
-    } catch (IndexException e) {
+    } catch (IndexException & e) {
       return nullptr;
     }
   }
@@ -78,7 +78,7 @@ class EdgeIndex {
         try {
           ConcurrentHashIndex<internal_id_t, Edge *> * idx_ptr = _id_index_out.Read(id);
           idx_ptr->ProcessAll(lambda);
-        } catch (IndexException e) {}
+        } catch (IndexException & e) {}
       }
       {
         std::function<void(Edge*)> lambda = [&rsts, &touched](Edge* e)mutable{
@@ -89,16 +89,16 @@ class EdgeIndex {
         try {
           ConcurrentHashIndex<internal_id_t, Edge *> * idx_ptr = _id_index_in.Read(id);
           idx_ptr->ProcessAll(lambda);
-        } catch (IndexException e) {}
+        } catch (IndexException & e) {}
       }
     } else if (dir == dir_out) {
       try {
         _id_index_out.Read(id)->ReadAll(rsts);
-      } catch (IndexException e) {}
+      } catch (IndexException & e) {}
     } else if (dir == dir_in) {
       try {
         _id_index_in.Read(id)->ReadAll(rsts);
-      } catch (IndexException e) {}
+      } catch (IndexException & e) {}
       // return nullptr;
     }
   }
@@ -114,7 +114,7 @@ class EdgeIndex {
         try {
           ConcurrentHashIndex<internal_id_t, Edge *> * idx_ptr = _id_index_out.Read(id);
           idx_ptr->ProcessAll(lambda);
-        } catch (IndexException e) {}
+        } catch (IndexException & e) {}
       }
       {
         std::function<void(Edge*)> lambda = [&rsts, &touched](Edge* e)mutable{
@@ -125,7 +125,7 @@ class EdgeIndex {
         try {
           ConcurrentHashIndex<internal_id_t, Edge *> * idx_ptr = _id_index_in.Read(id);
           idx_ptr->ProcessAll(lambda);
-        } catch (IndexException e) {}
+        } catch (IndexException & e) {}
       }
     } else if (dir == dir_out) {
       std::function<void(Edge*)> lambda = [&rsts](Edge* e)mutable{
@@ -134,14 +134,14 @@ class EdgeIndex {
       try {
         auto idx_ptr = _id_index_out.Read(id);
         idx_ptr->ProcessAll(lambda);
-      } catch (IndexException e) {}
+      } catch (IndexException & e) {}
     } else if (dir == dir_in) {
       std::function<void(Edge*)> lambda = [&rsts](Edge* e)mutable{
         rsts.push_back(e->_node1);
       };
       try {
         _id_index_in.Read(id)->ProcessAll(lambda);
-      } catch (IndexException e) {}
+      } catch (IndexException & e) {}
     }
   }
   void DeleteAllEdge(const internal_id_t id) {
@@ -175,7 +175,7 @@ class LabelEdgeIndex  {
   Edge* GetEdge(const label_t label, const internal_id_t id1, const internal_id_t id2) {
     try {
       return _index.at(label).GetEdge(id1, id2);
-    } catch (std::out_of_range e) {
+    } catch (std::out_of_range & e) {
       throw IndexException(Formatter() << "Edge label should be already in the index: " << label);
     }
   }
@@ -187,35 +187,35 @@ class LabelEdgeIndex  {
       // e->_internal_id1 = id1;
       // e->_internal_id2 = id2;
       return e;
-    } catch (std::out_of_range e) {
+    } catch (std::out_of_range & e) {
       throw IndexException(Formatter() << "Edge label should be already in the index: " << label);
     }
   }
   Edge* DeleteEdge(const label_t label, const internal_id_t id1, const internal_id_t id2) {
     try {
       return _index.at(label).DeleteEdge(id1, id2);
-    } catch (std::out_of_range e) {
+    } catch (std::out_of_range & e) {
       throw IndexException(Formatter() << "Edge label should be already in the index: " << label);
     }
   }
   void GetAllEdge(const label_t label, const internal_id_t id, const dir_t dir, std::vector<Edge*> & rsts) {
     try {
       _index.at(label).GetAllEdge(id, dir, rsts);
-    } catch (std::out_of_range e) {
+    } catch (std::out_of_range & e) {
       throw IndexException(Formatter() << "Edge label should be already in the index: " << label);
     }
   }
   void GetAllNeighbour(const label_t label, const internal_id_t id, const dir_t dir, std::vector<Node*> & rsts) {
     try {
       _index.at(label).GetAllNeighbour(id, dir, rsts);
-    } catch (std::out_of_range e) {
+    } catch (std::out_of_range & e) {
       throw IndexException(Formatter() << "Edge label should be already in the index: " << label);
     }
   }
   void DeleteAllEdge(const label_t label, const internal_id_t id) {
     try {
       _index.at(label).DeleteAllEdge(id);
-    } catch (std::out_of_range e) {
+    } catch (std::out_of_range & e) {
       throw IndexException(Formatter() << "Edge label should be already in the index: " << label);
     }
   }

@@ -11,11 +11,11 @@
 
 #define MAX_ERROR_LEN 256
 
-class param_exception: public std::exception {
+class param_exception: public std::runtime_error {
  private:
-  mutable std::string _msg;
-  void* stack_pointers[10];
-  size_t size;
+  // mutable std::string _msg;
+  // void* stack_pointers[10];
+  // size_t size;
  public:
   // param_exception(char const * fmt, ...) : std::exception() {
   //   char err_msg[MAX_ERROR_LEN];
@@ -25,18 +25,22 @@ class param_exception: public std::exception {
   //   va_end(args);
   //   _msg = err_msg;
   // }
-  param_exception(std::string msg) : std::exception(), _msg(msg), size(backtrace(stack_pointers, 10)) {
+  param_exception(std::string msg) : 
+    std::runtime_error(msg)
+    // , _msg(msg)
+    // , size(backtrace(stack_pointers, 10)) 
+    {
     // LOG_VERBOSE("Making an exception, msg is: %s", msg.c_str());
   }
-  virtual char const * what() const throw() {
-    char** stacks = backtrace_symbols(stack_pointers, size);
-    _msg += "\nTrace back:\n";
-    for (size_t i = 0; i < size; i++) {
-      _msg += stacks[i];
-      _msg += "\n";
-    }
-    return _msg.c_str();
-  }
+  // char const * what() const throw() override {
+  //   char** stacks = backtrace_symbols(stack_pointers, size);
+  //   _msg += "\nTrace back:\n";
+  //   for (size_t i = 0; i < size; i++) {
+  //     _msg += stacks[i];
+  //     _msg += "\n";
+  //   }
+  //   return _msg.c_str();
+  // }
 };
 
 

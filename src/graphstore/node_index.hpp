@@ -34,7 +34,7 @@ class NodeIndex  {
   Node* GetNodeViaLabeledId(const label_t label, const labeled_id_t id) {
     try {
       return _labeled_id_index.at(label).Read(id);
-    } catch (IndexException e) {
+    } catch (IndexException & e) {
       return nullptr;
     }
   }
@@ -44,7 +44,7 @@ class NodeIndex  {
   Node* GetNodeViaInternalId(const internal_id_t id) {
     try {
       return _no_label_id_index.Read(id);
-    } catch (IndexException e) {
+    } catch (IndexException & e) {
       return nullptr;
     }
   }
@@ -81,7 +81,7 @@ class NodeIndex  {
       Node* n = _no_label_id_index.Delete(id);
       _labeled_id_index.at(n->_type).Delete(n->_external_id);
       return n;
-    } catch (IndexException e) {
+    } catch (IndexException & e) {
       return nullptr;
     }
   }
@@ -90,7 +90,7 @@ class NodeIndex  {
       Node* n = _labeled_id_index.at(label).Delete(id);
       _no_label_id_index.Delete(n->_internal_id);
       return n;
-    } catch (IndexException e) {
+    } catch (IndexException & e) {
       return nullptr;
     }
   }

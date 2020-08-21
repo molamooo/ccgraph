@@ -26,6 +26,11 @@ struct labeled_id_t {
   uint64_t operator*(const uint64_t & r) {
     return id * r;
   }
+  labeled_id_t & operator=(const labeled_id_t & r) {
+    id = r.id;
+    label = r.label;
+    return *this;
+  }
 };
 
 std::ostream & operator<<(std::ostream & os, labeled_id_t const & id) {
