@@ -7,3 +7,8 @@ enum CompareOp {
   kG,
   kGe,
 };
+
+enum RetCode {
+  kOk = 0,
+  kAbort,
+};

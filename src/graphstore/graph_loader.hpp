@@ -1,17 +1,21 @@
 #pragma once
 #include "node_index.hpp"
 #include "edge_index.hpp"
+#include "lock.hpp"
 
 #include "store/string_server.hpp"
 #include <unordered_map>
 #include <fstream>
 #include <limits>
+#include <thread>
 
 class GraphLoader {
  private:
   NodeIndex* _node_index;
   LabelEdgeIndex* _edge_index;
   SchemaManager* _schema;
+  std::function<RetCode(std::string, std::vector<std::string>)> _lambda;
+  bool do_txn = true;
 
 
   enum ColumnType {
@@ -189,8 +193,8 @@ class GraphLoader {
     return n1;
   }
 
-  bool doLoadOneDataLine(DataFileCtx* ctx, std::ifstream& f) {
-    HeaderFileCtx & header_ctx = headers[ctx->header_file_index];
+  bool doLoadOneDataLine(const DataFileCtx* ctx, std::ifstream& f) {
+    const HeaderFileCtx & header_ctx = headers[ctx->header_file_index];
     label_t label = header_ctx.label; // if not fix_label, do not use this label
     char buf[2200];
     if (!f.getline(buf, 2200)) {return false;}
@@ -240,11 +244,37 @@ class GraphLoader {
     //     LOG_VERBOSE("data col[%llu]: \"%s\"", i, fields_buf.at(i));
     //   }
     // }
-
-
+    if (do_txn == false) {
+      insert_obj(header_ctx, ctx, id1, id2, label, fields_buf);
+    } else {
+      insert_obj_via_txn(header_ctx, ctx, id1, id2, label, fields_buf);
+    }
     
+    // if (label == _schema->get_label_by_name("Person") && id1 == 13194139534154) {
+    //   LOG_VERBOSE("the first 3 prop is :|%s|%s|%s|", 
+    //     StringServer::get()->get(((uint64_t*)head_of_prop_to_place)[0]).c_str(), 
+    //     StringServer::get()->get(((uint64_t*)head_of_prop_to_place)[1]).c_str(), 
+    //     StringServer::get()->get(((uint64_t*)head_of_prop_to_place)[2]).c_str());
+    //   uint64_t fn_id, ln_id, g_id;
+    //   _schema->get_prop((uint8_t*)head_of_prop_to_place, _schema->get_label_by_name("Person"), _schema->get_prop_idx("Person", "firstName"), (uint8_t*)&fn_id);
+    //   _schema->get_prop((uint8_t*)head_of_prop_to_place, _schema->get_label_by_name("Person"), _schema->get_prop_idx("Person", "lastName"), (uint8_t*)&ln_id);
+    //   _schema->get_prop((uint8_t*)head_of_prop_to_place, _schema->get_label_by_name("Person"), _schema->get_prop_idx("Person", "gender"), (uint8_t*)&g_id);
+    //   LOG_VERBOSE("the firstName prop is :\"%s\", ln prop is \"%s\", gender prop is \"%s\"",
+    //     StringServer::get()->get(fn_id).c_str(), 
+    //     StringServer::get()->get(ln_id).c_str(), 
+    //     StringServer::get()->get(g_id).c_str());
+    // }
+    return true;
+  }
 
-
+  void insert_obj(
+      const HeaderFileCtx & header_ctx, 
+      const DataFileCtx* ctx,
+      labeled_id_t id1, 
+      labeled_id_t id2,
+      label_t label,
+      std::vector<char*> & fields_buf
+    ) {
     void* head_of_prop_to_place = nullptr;
     if (header_ctx.is_node) {
       if (id1 == 8796093023738) {
@@ -350,24 +380,80 @@ class GraphLoader {
         }
       }
     }
-    // if (label == _schema->get_label_by_name("Person") && id1 == 13194139534154) {
-    //   LOG_VERBOSE("the first 3 prop is :|%s|%s|%s|", 
-    //     StringServer::get()->get(((uint64_t*)head_of_prop_to_place)[0]).c_str(), 
-    //     StringServer::get()->get(((uint64_t*)head_of_prop_to_place)[1]).c_str(), 
-    //     StringServer::get()->get(((uint64_t*)head_of_prop_to_place)[2]).c_str());
-    //   uint64_t fn_id, ln_id, g_id;
-    //   _schema->get_prop((uint8_t*)head_of_prop_to_place, _schema->get_label_by_name("Person"), _schema->get_prop_idx("Person", "firstName"), (uint8_t*)&fn_id);
-    //   _schema->get_prop((uint8_t*)head_of_prop_to_place, _schema->get_label_by_name("Person"), _schema->get_prop_idx("Person", "lastName"), (uint8_t*)&ln_id);
-    //   _schema->get_prop((uint8_t*)head_of_prop_to_place, _schema->get_label_by_name("Person"), _schema->get_prop_idx("Person", "gender"), (uint8_t*)&g_id);
-    //   LOG_VERBOSE("the firstName prop is :\"%s\", ln prop is \"%s\", gender prop is \"%s\"",
-    //     StringServer::get()->get(fn_id).c_str(), 
-    //     StringServer::get()->get(ln_id).c_str(), 
-    //     StringServer::get()->get(g_id).c_str());
-    // }
-    return true;
+  }
+
+
+  void insert_obj_via_txn(
+      const HeaderFileCtx & header_ctx, 
+      const DataFileCtx* ctx,
+      labeled_id_t id1, 
+      labeled_id_t id2,
+      label_t label,
+      std::vector<char*> & fields_buf) {
+    // void* head_of_prop_to_place = nullptr;
+
+    std::vector<std::string> params(_schema->get_prop_count(label));
+
+    for (size_t i = 0; i < fields_buf.size(); i++) {
+      if (header_ctx.column_descriptor[i].col_type != kPropIdx) continue;
+      size_t prop_idx = header_ctx.column_descriptor[i].internal_prop_idx;
+      if (header_ctx.fix_label == false) prop_idx = _schema->get_prop_idx(label, header_ctx.column_descriptor[i].prop_name);
+      if (prop_idx >= params.size()) params.resize(prop_idx+1);
+      params.at(prop_idx) = fields_buf[i];
+      if (id1 == 343597719619) {
+        std::cout << "placing " << i << "-th col of data file to " << prop_idx << "-th prop col, prop name is " << header_ctx.column_descriptor[i].prop_name << "\n";
+        std::cout << "this prop is " << fields_buf[i] << "\n";
+      }
+    }
+    if (header_ctx.is_node) {
+      // if (id1 == 8796093023738) {
+      //   std::cout << "a node with id = 8796093023738, label is " << (int)label << ", data file is " << ctx->data_file_name << std::endl;
+      // }
+      id1.label = label;
+      char buf[30];
+      sprintf(buf, "%lu", id1.id);
+      params.insert(params.begin(), buf);
+      params.insert(params.begin(), _schema->get_label_name(label));
+      while (_lambda("ldbc_insert_node", params) != kOk) {
+        // std::cout << "txn conflict when inserting node "<< id1.label << ":" << id1.id << "\n" ;
+      }
+      // if (id1 == 1287) {
+      //   Node* n = _node_index->GetNodeViaLabeledId(label, id1);
+      //   if (n == nullptr) {
+      //     LOG_INFO("no such node with id=1287");
+      //   } else {
+      //     LOG_INFO("node %d:%llu is inserted at 0x%x, in id is %llu", label, id1.id, n, n->_internal_id.id);
+      //   }
+      // }
+    } else {
+      // need to find out the internal id of node1 and node2
+      std::string base_label_of_id1 = header_ctx.column_descriptor[0].base_label_of_ex_id;
+      std::string base_label_of_id2 = header_ctx.column_descriptor[1].base_label_of_ex_id;
+      Node *n1 = locate_node_via_external_id(id1, base_label_of_id1), *n2 = locate_node_via_external_id(id2, base_label_of_id2);
+
+      char buf[30];
+      sprintf(buf, "%lu", id2.id);
+      params.insert(params.begin(), buf);
+      params.insert(params.begin(), _schema->get_label_name(n2->_external_id.label));
+      sprintf(buf, "%lu", id1.id);
+      params.insert(params.begin(), buf);
+      params.insert(params.begin(), _schema->get_label_name(n1->_external_id.label));
+      params.insert(params.begin(), _schema->get_label_name(label));
+      while (_lambda("ldbc_insert_edge", params) != kOk) {
+        // std::cout << "txn conflict when inserting edge "<< id1.label << ":" << id1.id << "->"<< id2.label << ":" << id2.id  << "\n" ;
+      }
+
+      // bool _;
+      // Edge *e = _edge_index->TouchEdge(label, n1->_internal_id, n2->_internal_id, _);
+      // e->_external_id1 = n1->_external_id;
+      // e->_external_id2 = n2->_external_id;
+      // e->_node1 = n1;
+      // e->_node2 = n2;
+    }
+    
   }
   
-  void doLoadOneDataFile(DataFileCtx* ctx) {
+  void doLoadOneDataFile(const DataFileCtx* ctx) {
     std::ifstream f(ctx->data_file_name);
 
     while(doLoadOneDataLine(ctx, f));
@@ -375,10 +461,14 @@ class GraphLoader {
 
  public:
   GraphLoader(
-      NodeIndex* node_index, LabelEdgeIndex* edge_index, SchemaManager* schema) {
+      NodeIndex* node_index, 
+      LabelEdgeIndex* edge_index, 
+      SchemaManager* schema,
+      std::function<RetCode(std::string, std::vector<std::string>)> lambda) {
     _node_index = node_index;
     _edge_index = edge_index;
     _schema = schema;
+    _lambda = lambda;
   }
 
   void prepare(const std::string & descption_file) {
@@ -387,13 +477,45 @@ class GraphLoader {
   }
 
   void doLoad() {
+    std::vector<DataFileCtx*> node_jobs, edge_jobs;
     for (auto & df : data_files) {
-      if (headers[df.header_file_index].is_node == false) continue;
-      doLoadOneDataFile(&df);
+      if (headers[df.header_file_index].is_node == false) {
+        edge_jobs.push_back(&df);
+      }
+      else {
+        node_jobs.push_back(&df);
+      }
     }
-    for (auto & df : data_files) {
-      if (headers[df.header_file_index].is_node == true) continue;
-      doLoadOneDataFile(&df);
+
+
+
+    const size_t loader_cnt = 40;
+    std::vector<std::thread> loader_threads;
+
+    for (size_t t = 0; t < loader_cnt; t++) {
+      std::thread loader_thread([this, &node_jobs, t](){
+        for (size_t i = t; i < node_jobs.size(); i += loader_cnt)
+          doLoadOneDataFile(node_jobs[i]);
+      });
+      loader_threads.push_back(std::move(loader_thread));
     }
+    for (auto & t : loader_threads) {
+      t.join();
+    }
+    loader_threads.clear();
+
+    std::cout << "there are " << locker_count.load() << " lockers after node load\n";
+
+    for (size_t t = 0; t < loader_cnt; t++) {
+      std::thread loader_thread([this, &edge_jobs, t](){
+        for (size_t i = t; i < edge_jobs.size(); i += loader_cnt)
+          doLoadOneDataFile(edge_jobs[i]);
+      });
+      loader_threads.push_back(std::move(loader_thread));
+    }
+    for (auto & t : loader_threads) {
+      t.join();
+    }
+    std::cout << "there are " << locker_count.load() << " lockers after edge load\n";
   }
 };

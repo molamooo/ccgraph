@@ -1402,18 +1402,21 @@ class Worker {
     QueryStep* start = q->get_first_step();
     return ProcessStepRecursive(start)
       .thenValue([this, q](folly::Unit){
-        LOG_INFO("no error, trying to commit");
+        LOG_DEBUG("no error, trying to commit");
         if (_ccgraph->CommitCheck(q->get_cc_ctx())) {
           q->write_final_rst();
           _ccgraph->Commit(q->get_cc_ctx());
+          q->_rc = kOk;
         } else {
           _ccgraph->Abort(q->get_cc_ctx());
+          q->_rc = kAbort;
         }
         // todo: reply to client
-      }).thenError(folly::tag_t<AbortException>{}, [this,q](std::exception const & e){
-        LOG_INFO("Error : %s", e.what());
+      }).thenError(folly::tag_t<std::exception&>{}, [this,q](std::exception const & e){
         if (dynamic_cast<const AbortException*>(&e)) {
+          // std::cout << "Abort Error : " <<  e.what() << "\n";
           _ccgraph->Abort(q->get_cc_ctx());
+          q->_rc = kAbort;
         } else {
           LOG_INFO("Fatal error: %s", e.what());
           // todo: exit gracefully

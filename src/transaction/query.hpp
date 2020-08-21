@@ -38,6 +38,7 @@ class Query {
   CCContex* _cc_ctx = nullptr;
 
  public:
+  RetCode _rc;
   QueryStep* get_first_step() { return _first_step; }
   QueryStep* get_step(const size_t idx) { return _steps[idx]; }
   size_t get_nstep() { return _steps.size(); }

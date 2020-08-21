@@ -82,7 +82,9 @@ class CCFrameworkCore {
     _initialized = true;
   }
   void loadGraph(const std::string & description_file) {
-    GraphLoader loader(_node_index, _edge_index, _schema);
+    GraphLoader loader(_node_index, _edge_index, _schema, [this](std::string qname, std::vector<std::string> params)->RetCode{
+      return runQuery(qname, params).wait().get()->_rc;
+    });
     loader.prepare(description_file);
     loader.doLoad();
   }
@@ -103,7 +105,7 @@ class CCFrameworkCore {
     }
 
     return _worker->ProcessQuery(q).thenValue([q](folly::Unit)->std::shared_ptr<Query> {
-      LOG_INFO("No error? directly return the final rst");
+      LOG_DEBUG("No error? directly return the final rst");
       return q;
     });
   }
