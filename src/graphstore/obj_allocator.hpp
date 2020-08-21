@@ -6,24 +6,33 @@
 #include <tuple>
 #include <boost/pool/pool.hpp>
 #include <unordered_map>
+#include <atomic>
 
 // todo: unify this two allcator
 
 class FixSizeAllocator {
  private:
   boost::pool<> _pool;
+  std::atomic_flag _f = ATOMIC_FLAG_INIT;
  public:
   FixSizeAllocator(const uint64_t size) : _pool(size) {}
-  void * Alloc() {return _pool.malloc();};
+  void * Alloc() {
+    while (_f.test_and_set());
+    void * p = _pool.malloc();
+    _f.clear();
+    return p;
+  };
   void Free(void * ptr) {
+    while (_f.test_and_set());
     _pool.free(ptr);
+    _f.clear();
   }
 };
 
 class Allocator {
  private:
-  std::unordered_map<uint64_t, boost::pool<>> _pools;
-  std::unordered_map<label_t, boost::pool<>*> _pools_by_label;
+  std::unordered_map<uint64_t, FixSizeAllocator> _pools;
+  std::unordered_map<label_t, FixSizeAllocator*> _pools_by_label;
   const SchemaManager & _sm;
  public:
   Allocator(const SchemaManager & sm) : _pools(), _pools_by_label(), _sm(sm) {
@@ -38,14 +47,14 @@ class Allocator {
     }
   }
   void* Alloc(const label_t l) {
-    return _pools_by_label.at(l)->malloc();
+    return _pools_by_label.at(l)->Alloc();
   }
   void Free(const label_t l, void* ptr) {
-    _pools_by_label.at(l)->free(ptr);
+    _pools_by_label.at(l)->Free(ptr);
   }
   template<typename ValT>
   std::function<ValT*()> get_allocator(const label_t l) {
-    boost::pool<>* pool = _pools_by_label.at(l);
-    return [pool](){return (ValT*)(pool->malloc());};
+    FixSizeAllocator* pool = _pools_by_label.at(l);
+    return [pool](){return (ValT*)(pool->Alloc());};
   }
 };

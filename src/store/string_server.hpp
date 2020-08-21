@@ -13,7 +13,9 @@ class StringServer {
   std::unordered_map<std::size_t, std::vector<uint64_t>> _buckets_of_offset;
   std::vector<std::string> _stored_string;
  public:
-  StringServer() : _latch(), _next_id(1), _buckets_of_offset(), _stored_string({""}) {}
+  StringServer() : _latch(), _next_id(0), _buckets_of_offset(), _stored_string() {
+    touch("");
+  }
   bool compare(const uint64_t id1, const uint64_t id2, CompareOp op) {
     if (id1 == 0 || id2 == 0) {
       switch (op) {
@@ -55,8 +57,9 @@ class StringServer {
     if (_buckets_of_offset.find(hashed) == _buckets_of_offset.end()) {
       _buckets_of_offset[hashed] = {_next_id};
       _stored_string.push_back(str);
+      uint64_t id_to_ret = _next_id++;
       _latch.Wunlock();
-      return _next_id++;
+      return id_to_ret;
     }
 
     auto & bucket = _buckets_of_offset[hashed];
@@ -69,8 +72,9 @@ class StringServer {
 
     bucket.push_back(_next_id);
     _stored_string.push_back(str);
+    uint64_t id_to_ret = _next_id++;
     _latch.Wunlock();
-    return _next_id++;
+    return id_to_ret;
   }
   static StringServer* get() {
     static StringServer _singleton;
