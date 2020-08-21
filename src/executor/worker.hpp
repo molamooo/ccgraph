@@ -728,15 +728,16 @@ class Worker {
   }
   void ProcPlacePropColBack(QueryStep* _step_) {
     auto step = dynamic_cast<PlacePropColBack*>(_step_);
-    Result & r  = step->get_rst();
-    for (size_t i = 0; i < r.get_rows(); i++) {
-      ResultItem item = r.get(i,  step->get_src_col());
-      if (r.get_type(step->get_col_to_put()) == Result::kNode) {
-        Node* n = (Node*)r.get(i, step->get_col_to_put());
+    Result & src_rst = step->get_prev(0)->get_rst();
+    Result & dst_rst  = step->get_rst();
+    for (size_t i = 0; i < dst_rst.get_rows(); i++) {
+      ResultItem item = src_rst.get( src_rst.get_rows() == 1 ? 0 : i,  step->get_src_col());
+      if (dst_rst.get_type(step->get_col_to_put()) == Result::kNode) {
+        Node* n = (Node*)dst_rst.get(i, step->get_col_to_put());
         if (n == nullptr) throw QueryException("currently there should be no place back to null ptr");
         _schema->set_prop(n->_prop, n->_type, step->_prop_idx, (uint8_t*)&item);
-      } else if (r.get_type(step->get_col_to_put()) == Result::kEdge) {
-        Edge* e = (Edge*)r.get(i, step->get_col_to_put());
+      } else if (dst_rst.get_type(step->get_col_to_put()) == Result::kEdge) {
+        Edge* e = (Edge*)dst_rst.get(i, step->get_col_to_put());
         if (e == nullptr) throw QueryException("currently there should be no place back to null ptr");
         _schema->set_prop(e->_prop, e->_label, step->_prop_idx, (uint8_t*)&item);
       } else {
@@ -1038,17 +1039,27 @@ class Worker {
     auto prev = step->get_prev(0);
     if (prev->get_rst().get_type(step->get_src_col()) != Result::kLabeledNodeId)
       throw QueryException("Create node src must be labeled node id");
-    auto f = folly::makeFuture();
-    for (size_t i = 0; i < prev->get_rst().get_rows(); i++) {
-      labeled_id_t id = prev->get_rst().get(i, step->get_src_col());
-      id.label = step->get_label();
-      f = std::move(f).thenValue([this, id, step](folly::Unit){
-        return _ccgraph->InsertNode(step->get_label(), id, step->get_cc_ctx());
-      }).thenValue([this, step, i](Node* n){
-        step->get_rst().set(i, step->get_col_to_put(), (ResultItem)n);
-      });
+    // auto f = folly::makeFuture();
+    // todo: do we need multi row insertion?
+    if (prev->get_rst().get_rows() != 1) {
+      throw QueryException("Only support single insertion");
     }
-    return f;
+    labeled_id_t id = prev->get_rst().get(0, step->get_src_col());
+    id.label = step->get_label();
+    return _ccgraph->InsertNode(step->get_label(), id, step->get_cc_ctx())
+      .thenValue([this, step](Node* n){
+        step->get_rst().set(0, step->get_col_to_put(), (ResultItem)n);
+      });
+    // for (size_t i = 0; i < prev->get_rst().get_rows(); i++) {
+    //   labeled_id_t id = prev->get_rst().get(i, step->get_src_col());
+    //   id.label = step->get_label();
+    //   f = std::move(f).thenValue([this, id, step](folly::Unit){
+    //     return _ccgraph->InsertNode(step->get_label(), id, step->get_cc_ctx());
+    //   }).thenValue([this, step, i](Node* n){
+    //     step->get_rst().set(i, step->get_col_to_put(), (ResultItem)n);
+    //   });
+    // }
+    // return f;
   }
 
   VFuture ProcUpdateNode(QueryStep* _step_) {
@@ -1112,8 +1123,8 @@ class Worker {
 
   VFuture ProcCreateEdge(QueryStep* _step_) {
     auto step = dynamic_cast<CreateEdgeStep*>(_step_);
-    auto prev1 = step->get_prev(0)->get_rst();
-    auto prev2 = step->get_prev(1)->get_rst();
+    auto & prev1 = step->get_prev(0)->get_rst();
+    auto & prev2 = step->get_prev(1)->get_rst();
     bool prev1_single = (prev1.get_rows() == 1), 
          prev2_single = (prev2.get_rows() == 1);
     if (!prev1_single && !prev2_single) {
@@ -1126,7 +1137,10 @@ class Worker {
     for (size_t i = 0; i < n_rows; i++) {
       labeled_id_t id1 = extract_node_id(prev1, prev1_single?0:i, step->get_src_col(0));
       labeled_id_t id2 = extract_node_id(prev2, prev2_single?0:i, step->get_src_col(1));
-      f = std::move(f).thenValue([this, id1, id2, step](folly::Unit){
+      f = std::move(f).thenValue([this, id1, id2, step](folly::Unit)mutable{
+        if (step->get_dir() == dir_in) {
+          labeled_id_t t = id1; id1 = id2; id2 = t;
+        }
         return _ccgraph->CreateEdgeViaLabeledId(step->get_label(), id1, id2, step->get_cc_ctx());
       }).thenValue([this, step, i](Edge* e){
         step->get_rst().set(i, step->get_col_to_put(), (ResultItem)e);
@@ -1165,8 +1179,8 @@ class Worker {
   // the index again!!!! This is like the index-free adjacency case
   VFuture ProcUpdateEdge(QueryStep* _step_) {
     auto step = dynamic_cast<UpdateEdgeStep*>(_step_);
-    auto prev1 = step->get_prev(0)->get_rst();
-    auto prev2 = step->get_prev(1)->get_rst();
+    auto & prev1 = step->get_prev(0)->get_rst();
+    auto & prev2 = step->get_prev(1)->get_rst();
     bool prev1_single = (prev1.get_rows() == 1), 
          prev2_single = (prev2.get_rows() == 1);
     if (!prev1_single && !prev2_single) {
@@ -1192,8 +1206,8 @@ class Worker {
   // the index again!!!! This is like the index-free adjacency case
   VFuture ProcDeleteEdge(QueryStep* _step_) {
     auto step = dynamic_cast<DeleteEdgeStep*>(_step_);
-    auto prev1 = step->get_prev(0)->get_rst();
-    auto prev2 = step->get_prev(1)->get_rst();
+    auto & prev1 = step->get_prev(0)->get_rst();
+    auto & prev2 = step->get_prev(1)->get_rst();
     bool prev1_single = (prev1.get_rows() == 1), 
          prev2_single = (prev2.get_rows() == 1);
     if (!prev1_single && !prev2_single) {

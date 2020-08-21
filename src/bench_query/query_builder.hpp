@@ -32,6 +32,20 @@ class QueryBuilder {
       LDBCQuery12 q; q.build(params, q_ptr);
     } else if (query_name == "ldbc_neighbour") {
       LDBCNeighbour q; q.build(params, q_ptr);
+    } else if (query_name == "ldbc_insert_person") {
+      LDBCInsertPerson q; q.build(params, q_ptr);
+    } else if (query_name == "ldbc_insert_knows") {
+      LDBCInsertKnows q; q.build(params, q_ptr);
+    } else if (query_name == "ldbc_query_person") {
+      LDBCQuerPerson q; q.build(params, q_ptr);
+    } else if (query_name == "ldbc_insert_edge") {
+      LDBCInsertEdge q; q.build(params, q_ptr);
+    } else if (query_name == "ldbc_insert_node") {
+      LDBCInsertNode q; q.build(params, q_ptr);
+    } else if (query_name == "ldbc_query_comment") {
+      LDBCQueryComment q; q.build(params, q_ptr);
+    } else if (query_name == "ldbc_query_post") {
+      LDBCQueryPost q; q.build(params, q_ptr);
     } else {
       throw FatalException(Formatter() << "No such query: " << query_name);
     }

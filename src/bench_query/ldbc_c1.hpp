@@ -5,7 +5,7 @@
 
 SchemaManager* _schema = SchemaManager::get();
 
-static label_t Person, City, Company, University, Country, Post, Comment, Forum,
+static label_t Person, City, Company, University, Country, Post, Comment, Forum, Continent, Tag, TagClass,
         knows, isLocatedIn, workAt, studyAt, hasCreator, isPartOf, hasTag, containerOf, hasMember, likes, replyOf, hasInterest, hasType;
 
 void check_label_initialized() {
@@ -23,6 +23,9 @@ void check_label_initialized() {
   Company = _schema->get_label_by_name("Company");
   University = _schema->get_label_by_name("University");
   Country = _schema->get_label_by_name("Country");
+  Continent = _schema->get_label_by_name("Continent");
+  Tag = _schema->get_label_by_name("Tag");
+  TagClass = _schema->get_label_by_name("TagClass");
   Post = _schema->get_label_by_name("Post");
   Comment = _schema->get_label_by_name("Comment");
   Forum = _schema->get_label_by_name("Forum");
@@ -60,6 +63,7 @@ class LDBCQuery1 {
 
     start_node_id_ctx
       .get_node(Person, "param_person_id", "start_person_node")
+      .filter_simple([](ResultItem v){return v != 0;}, "start_person_node")
       // fix: the original ldbc result contains the start node. this is wrong, but we need to be the same
       .get_neighbour_varlen(knows, dir_bidir, 0, 3, "start_person_node", {"friend_node", "depth"}) // done: both direction
       .place_prop(0, Result::kSTRING, "friend_node", "first_name")
@@ -133,6 +137,7 @@ class LDBCQuery2 {
 
     start_node_id_ctx
       .get_node(Person, "param_person_id", "start_person_node")
+      .filter_simple([](ResultItem v){return v != 0;}, "start_person_node")
       .get_all_neighbour(knows, dir_bidir, "start_person_node", "friend_node") // done: both direction
       .get_all_neighbour(hasCreator, dir_in, "friend_node", "message_node")
       .place_prop(_schema->get_prop_idx("Comment", "creationDate"), Result::kUINT64, "message_node", "message_creation_date")
@@ -170,10 +175,11 @@ class LDBCQuery3 {
     StepCtx min_date = builder.put_const(Result::kUINT64, _min_date, "param_min_date");
     StepCtx country_x = builder.put_const(Result::kSTRING, _country_x, "param_country_x");
     StepCtx country_y = builder.put_const(Result::kSTRING, _country_y, "param_country_y");
-    StepCtx zero_const = builder.put_const(Result::kUINT64, 0, "const_zero");
+    // StepCtx zero_const = builder.put_const(Result::kUINT64, 0, "const_zero");
 
     start_node_id_ctx
       .get_node(Person, "param_person_id", "start_person_node")
+      .filter_simple([](ResultItem v){return v != 0;}, "start_person_node")
       .get_neighbour_varlen(knows, dir_bidir, 1, 2, "start_person_node", {"friend_node", "depth"}) // done: both direction
 
       .get_all_neighbour(isLocatedIn, dir_out, "friend_node", "friend_city_node")
@@ -233,6 +239,7 @@ class LDBCQuery4 {
 
     start_node_id_ctx
       .get_node(Person, "param_person_id", "start_person_node")
+      .filter_simple([](ResultItem v){return v != 0;}, "start_person_node")
       .get_all_neighbour(knows, dir_bidir, "start_person_node", "friend_node") // done: both direction
       // get all message neighbour
       .get_all_neighbour(hasCreator, dir_in, "friend_node", "message_node")
@@ -259,8 +266,8 @@ class LDBCQuery4 {
       // sort 
       .sort({"after_count", "tag_name"}, {false, true}, 10);
 
-    builder.new_col_to_ret(Result::kUINT64, "after_count");
     builder.new_col_to_ret(Result::kSTRING, "tag_name");
+    builder.new_col_to_ret(Result::kUINT64, "after_count");
     builder.write_to_query(q_ptr);
   }
 };
@@ -282,6 +289,7 @@ class LDBCQuery5 {
 
     start_node_id_ctx
       .get_node(Person, "param_person_id", "start_person_node")
+      .filter_simple([](ResultItem v){return v != 0;}, "start_person_node")
       .get_neighbour_varlen(knows, dir_bidir, 1, 2, "start_person_node", {"friend_node", "depth"}) // done: both direction
       // get all message neighbour
       .get_all_neighbour(hasCreator, dir_in, "friend_node", "message_node")
@@ -304,8 +312,8 @@ class LDBCQuery5 {
       //     postCount                 forum node
       .sort({"postCount", "forum_node"}, {false, true}, 20);
 
-    builder.new_col_to_ret(Result::kUINT64, "postCount");
     builder.new_col_to_ret(Result::kSTRING, "forum_node", _schema->get_prop_idx("Forum", "title"));
+    builder.new_col_to_ret(Result::kUINT64, "postCount");
     builder.write_to_query(q_ptr);
   }
 };
@@ -328,6 +336,7 @@ class LDBCQuery6 {
 
     start_node_id_ctx
       .get_node(Person, "param_person_id", "start_person_node")
+      .filter_simple([](ResultItem v){return v != 0;}, "start_person_node")
       .get_neighbour_varlen(knows, dir_bidir, 1, 2, "start_person_node", {"friend_node", "depth"}) // done: both direction
       .get_all_neighbour(hasCreator, dir_in, "friend_node", "message_node")
       // todo: a better plan that does not need to query twice
@@ -341,8 +350,8 @@ class LDBCQuery6 {
       .select_group({"other_tag", "other_tag_name"}, {"message_node"}, {GroupByStep::kCount}, {{}}, {"count"}) // group_rst
       .sort({"count", "other_tag_name"}, {false, true}, 10);
 
-    builder.new_col_to_ret(Result::kUINT64, "count");
     builder.new_col_to_ret(Result::kSTRING, "other_tag_name");
+    builder.new_col_to_ret(Result::kUINT64, "count");
     builder.write_to_query(q_ptr);
   }
 };
@@ -361,6 +370,7 @@ class LDBCQuery7 {
 
     start_node_id_ctx
       .get_node(Person, "param_person_id", "start_person_node")
+      .filter_simple([](ResultItem v){return v != 0;}, "start_person_node")
       .get_all_neighbour(hasCreator, dir_in, "start_person_node", "message_node")
       .get_all_edge(likes, dir_in, "message_node", "like_edge")
       .place_prop(0, Result::kUINT64, "like_edge", "like_date")
@@ -403,6 +413,7 @@ class LDBCQuery8 {
 
     start_node_id_ctx
       .get_node(Person, "param_person_id", "start_person_node")
+      .filter_simple([](ResultItem v){return v != 0;}, "start_person_node")
       .get_all_neighbour(hasCreator, dir_in, "start_person_node", "message_node")
       .get_all_neighbour(replyOf, dir_in, "message_node", "comment_node")
       // .place_prop(1, Result::kUINT64, "comment_node", "comment_date") // create date
@@ -437,6 +448,7 @@ class LDBCQuery9 {
 
     start_node_id_ctx
       .get_node(Person, "param_person_id", "start_person_node")
+      .filter_simple([](ResultItem v){return v != 0;}, "start_person_node")
       .get_neighbour_varlen(knows, dir_bidir, 1, 2, "start_person_node", {"friend_node", "depth"}) // done: both direction
       .get_all_neighbour(hasCreator, dir_in, "friend_node", "message_node")
       // .place_prop(1, Result::kUINT64, "message_node", "message_date")
@@ -470,6 +482,7 @@ class LDBCQuery10 {
 
     auto score_ctx = start_node_id_ctx
       .get_node(Person, "param_person_id", "start_person_node")
+      .filter_simple([](ResultItem v){return v != 0;}, "start_person_node")
       .get_neighbour_varlen(knows, dir_bidir, 1, 2, "start_person_node", {"friend_node", "depth"}) // done: both direction
       .filter_simple([](ResultItem v){
         return v == 2;
@@ -547,6 +560,7 @@ class LDBCQuery11 {
 
     start_node_id_ctx
       .get_node(Person, "param_person_id", "start_person_node")
+      .filter_simple([](ResultItem v){return v != 0;}, "start_person_node")
       .get_neighbour_varlen(knows, dir_bidir, 1, 2, "start_person_node", {"friend_node", "depth"}) // done: both direction
       .get_all_edge(workAt, dir_out, "friend_node", "work_at_edge")
       .place_prop(0, Result::kUINT32, "work_at_edge", "works_from")
@@ -584,6 +598,7 @@ class LDBCQuery12 {
 
     start_node_id_ctx
       .get_node(Person, "param_person_id", "start_person_node")
+      .filter_simple([](ResultItem v){return v != 0;}, "start_person_node")
       .get_all_neighbour(knows, dir_bidir, "start_person_node", "friend_node") // done: both direction
       .get_all_neighbour(hasCreator, dir_in, "friend_node", "comment_node")
       .filter_label(Comment, kEq, "comment_node")
@@ -624,13 +639,289 @@ class LDBCNeighbour {
 
     start_node_id_ctx
       .get_node(Person, "param_person_id", "start_person_node")
-      .get_neighbour_varlen(knows, dir_bidir, _min_depth, _max_depth, "start_person_node", {"friend_node", "depth"})
-      .sort({"depth", "friend_node"}, {true, true});
+      .filter_simple([](ResultItem v){return v != 0;}, "start_person_node")
 
     builder.new_col_to_ret(Result::kUINT64, "friend_node", QueryRstColType::kNodeLabeledId);
     builder.new_col_to_ret(Result::kUINT64, "depth");
     builder.new_col_to_ret(Result::kSTRING, "friend_node", _schema->get_prop_idx("Person", "firstName"));
     builder.new_col_to_ret(Result::kSTRING, "friend_node", _schema->get_prop_idx("Person", "lastName"));
     builder.write_to_query(q_ptr);
+  }
+};
+
+class LDBCUpdateBuilder {
+ private:
+  using str = std::string;
+ public:
+  SeqQueryBuilder b;
+  StepCtx insertPerson(std::vector<std::string> params) {
+    StepCtx person_id = b.put_const(Result::kLabeledNodeId, std::stoull(params[0]), "param_person_id", Person);
+    StepCtx first_name = b.put_const(Result::kSTRING, StringServer::get()->touch(params[1]), "param_first_name");
+    StepCtx last_name = b.put_const(Result::kSTRING, StringServer::get()->touch(params[2]), "param_last_name");
+    StepCtx gender = b.put_const(Result::kSTRING, StringServer::get()->touch(params[3]), "param_gender");
+    StepCtx birthday = b.put_const(Result::kUINT64, std::stoull(params[4]), "param_birthday");
+    StepCtx email = b.put_const(Result::kSTRING, StringServer::get()->touch(params[5]), "param_email");
+    StepCtx speaks = b.put_const(Result::kSTRING, StringServer::get()->touch(params[6]), "param_speaks");
+    StepCtx browserUsed = b.put_const(Result::kSTRING, StringServer::get()->touch(params[7]), "param_browserUsed");
+    StepCtx locationIP = b.put_const(Result::kSTRING, StringServer::get()->touch(params[8]), "param_locationIP");
+    StepCtx creation_date = b.put_const(Result::kUINT64, std::stoull(params[9]), "param_creation_date");
+
+    return person_id
+      .insert_node(Person, "param_person_id", "person_node")
+      .place_prop_back(Person, "firstName", Result::kSTRING, first_name, "param_first_name", "person_node")
+      .place_prop_back(Person, "lastName", Result::kSTRING, last_name, "param_last_name", "person_node")
+      .place_prop_back(Person, "gender", Result::kSTRING, gender, "param_gender", "person_node")
+      .place_prop_back(Person, "birthday", Result::kUINT64, birthday, "param_birthday", "person_node")
+      .place_prop_back(Person, "creationDate", Result::kUINT64, creation_date, "param_creation_date", "person_node")
+      .place_prop_back(Person, "locationIP", Result::kSTRING, locationIP, "param_locationIP", "person_node")
+      .place_prop_back(Person, "browserUsed", Result::kSTRING, browserUsed, "param_browserUsed", "person_node")
+      .place_prop_back(Person, "speaks", Result::kSTRING, speaks, "param_speaks", "person_node")
+      .place_prop_back(Person, "email", Result::kSTRING, email, "param_email", "person_node");
+  }
+  /**
+   * @brief 
+   * 
+   * @param params 
+   * @param node1 : the step to share the result table.
+   * @param n1_alias 
+   * @param node2 
+   * @param n2_alias 
+   * @return StepCtx 
+   */
+  StepCtx insertEdge(label_t label, std::string param, StepCtx & rst_table, str n1_alias, dir_t dir, StepCtx & node2, str n2_alias, str dst_alias) {
+    // StepCtx person_id = b.put_const(Result::kLabeledNodeId, std::stoull(params[0]), "param_person_id", Person);
+    StepCtx edge_prop; Result::ColumnType ty; str prop_name;
+    if (label == hasMember || label == knows || label == likes) {
+      ty = Result::kUINT64;
+      edge_prop = b.put_const(Result::kUINT64, std::stoull(param), "p");
+      if (label == hasMember) prop_name = "joinDate";
+      else prop_name = "creationDate";
+    } else if (label == studyAt || label == workAt) {
+      ty = Result::kUINT32;
+      edge_prop = b.put_const(Result::kUINT32, std::stoull(param), "p");
+      if (label == studyAt) prop_name = "classYear";
+      else prop_name = "workFrom";
+    }
+
+    StepCtx to_ret = rst_table.insert_edge(label, node2, {n1_alias, n2_alias}, dir, dst_alias);
+    if (edge_prop._step == nullptr) {
+      return to_ret;
+    }
+    return to_ret.place_prop_back(label, prop_name, ty, edge_prop, "p", dst_alias);
+  }
+
+  StepCtx getNode(labeled_id_t id, str dst_alias, StepCtx* prev) {
+    StepCtx ret;
+    if (prev == nullptr) {
+      ret = b.put_const(Result::kLabeledNodeId, id.id, "p", id.label);
+    } else {
+      ret = prev->put_const(Result::kLabeledNodeId, id.id, "p", id.label);
+    }
+    return ret.get_node(id.label, "p", dst_alias);
+  }
+
+  StepCtx insertEdge(label_t label, std::string param, labeled_id_t id1, dir_t dir, labeled_id_t id2, str dst_alias) {
+    StepCtx node2 = getNode(id2, "node2", nullptr);
+    StepCtx node1 = getNode(id1, "node1", &node2);
+    // node2._step->append_next(node1._step);
+    return insertEdge(label, param, node1, "node1", dir, node2, "node2", dst_alias);
+  }
+  void write_to_query(Query* q) {
+    b.write_to_query(q);
+  }
+};
+
+class LDBCInsertPerson {
+ public:
+  void build(std::vector<std::string> params, Query* q_ptr) {
+    check_label_initialized();
+    LDBCUpdateBuilder ub;
+    ub.insertPerson(params);
+    ub.write_to_query(q_ptr);
+  }
+};
+class LDBCInsertKnows {
+ public:
+  void build(std::vector<std::string> params, Query* q_ptr) {
+    check_label_initialized();
+    LDBCUpdateBuilder ub;
+    ub.insertEdge(knows, params[2], {std::stoull(params[0]), Person}, dir_out, {std::stoull(params[1]), Person}, "edge");
+    ub.write_to_query(q_ptr);
+  }
+};
+/**
+ * do insert at load phase. can handle all ldbc edge label;
+ */
+class LDBCInsertEdge {
+ public:
+  void build(std::vector<std::string> params, Query* q_ptr) {
+    check_label_initialized();
+    LDBCUpdateBuilder ub;
+    label_t edge_l = _schema->get_label_by_name(params[0]),
+            id1_l = _schema->get_label_by_name(params[1]),
+            id2_l = _schema->get_label_by_name(params[3]);
+    uint64_t id1 = std::stoull(params[2]),
+             id2 = std::stoull(params[4]);
+    ub.insertEdge(edge_l, params.size() == 6?params[5]:"", {id1, id1_l}, dir_out, {id2, id2_l}, "edge");
+    ub.write_to_query(q_ptr);
+  }
+};
+class LDBCInsertNode {
+  SeqQueryBuilder b;
+  void build_person(std::vector<std::string> params, Query* q_ptr) {
+    size_t idx = 1;
+    std::vector<StepCtx> ctxs(1);
+    StepCtx person_id     = b.put_const(Result::kLabeledNodeId, std::stoull(params[idx++]), "param_person_id", Person); ctxs.push_back(person_id);
+    StepCtx first_name    = b.put_const(Result::kSTRING,        StringServer::get()->touch(params[idx++]), "param_first_name"); ctxs.push_back(first_name);
+    StepCtx last_name     = b.put_const(Result::kSTRING,        StringServer::get()->touch(params[idx++]), "param_last_name"); ctxs.push_back(last_name);
+    StepCtx gender        = b.put_const(Result::kSTRING,        StringServer::get()->touch(params[idx++]), "param_gender"); ctxs.push_back(gender);
+    StepCtx birthday      = b.put_const(Result::kUINT64,        std::stoull(params[idx++]), "param_birthday"); ctxs.push_back(birthday);
+    StepCtx email         = b.put_const(Result::kSTRING,        StringServer::get()->touch(params[idx++]), "param_email"); ctxs.push_back(email);
+    StepCtx speaks        = b.put_const(Result::kSTRING,        StringServer::get()->touch(params[idx++]), "param_speaks"); ctxs.push_back(speaks);
+    StepCtx browserUsed   = b.put_const(Result::kSTRING,        StringServer::get()->touch(params[idx++]), "param_browserUsed"); ctxs.push_back(browserUsed);
+    StepCtx locationIP    = b.put_const(Result::kSTRING,        StringServer::get()->touch(params[idx++]), "param_locationIP"); ctxs.push_back(locationIP);
+    StepCtx creation_date = b.put_const(Result::kUINT64,        std::stoull(params[idx++]), "param_creation_date"); ctxs.push_back(creation_date);
+
+    if (params[1] == "1521") {
+      for (size_t i = 1; i < params.size(); i++) {
+        std::cout << i << "-th param is " << params[i] << "\n";
+        ResultItem val = ctxs[i]._step->get_rst().get(0, 0);
+        if (val != 20100127000805210 && val != 19860114) {
+          std::cout << StringServer::get()->get(val) << "\n";
+        }
+
+      }
+    }
+
+    person_id
+      .insert_node(Person, "param_person_id", "person_node")
+      .place_prop_back(Person, "firstName", Result::kSTRING, first_name, "param_first_name", "person_node")
+      .place_prop_back(Person, "lastName", Result::kSTRING, last_name, "param_last_name", "person_node")
+      .place_prop_back(Person, "gender", Result::kSTRING, gender, "param_gender", "person_node")
+      .place_prop_back(Person, "birthday", Result::kUINT64, birthday, "param_birthday", "person_node")
+      .place_prop_back(Person, "email", Result::kSTRING, email, "param_email", "person_node")
+      .place_prop_back(Person, "speaks", Result::kSTRING, speaks, "param_speaks", "person_node")
+      .place_prop_back(Person, "browserUsed", Result::kSTRING, browserUsed, "param_browserUsed", "person_node")
+      .place_prop_back(Person, "locationIP", Result::kSTRING, locationIP, "param_locationIP", "person_node")
+      .place_prop_back(Person, "creationDate", Result::kUINT64, creation_date, "param_creation_date", "person_node");
+    b.write_to_query(q_ptr);
+  }
+  void build_forum(std::vector<std::string> params, Query* q_ptr) {
+    size_t idx = 1;
+    StepCtx _id     = b.put_const(Result::kLabeledNodeId, std::stoull(params[idx++]), "param_id", Person);
+    StepCtx _title    = b.put_const(Result::kSTRING,        StringServer::get()->touch(params[idx++]), "param_tile");
+    StepCtx _cdate     = b.put_const(Result::kUINT64,        std::stoull(params[idx++]), "param_cdate");
+    _id
+      .insert_node(Forum, "param_id", "_node")
+      .place_prop_back(Forum, "title", Result::kSTRING, _title, "param_tile", "_node")
+      .place_prop_back(Forum, "creationDate", Result::kUINT64, _cdate, "param_cdate", "_node");
+    b.write_to_query(q_ptr);
+  }
+  void build_msg(std::vector<std::string> params, Query* q_ptr, label_t label) {
+    size_t idx = 1;
+    StepCtx _id       = b.put_const(Result::kLabeledNodeId, std::stoull(params[idx++]), "param_id", Person);
+    StepCtx _cdate    = b.put_const(Result::kUINT64,        std::stoull(params[idx++]), "param_cdate");
+    StepCtx _ip       = b.put_const(Result::kSTRING,        StringServer::get()->touch(params[idx++]), "param_ip");
+    StepCtx _browser  = b.put_const(Result::kSTRING,        StringServer::get()->touch(params[idx++]), "param_browser");
+    StepCtx _content  = b.put_const(Result::kSTRING,        StringServer::get()->touch(params[idx++]), "param_content");
+    StepCtx _length   = b.put_const(Result::kUINT32,        std::stoull(params[idx++]), "param_length");
+    StepCtx _image    = b.put_const(Result::kSTRING,        StringServer::get()->touch(params[idx++]), "param_image");
+    StepCtx _language = b.put_const(Result::kSTRING,        StringServer::get()->touch(params[idx++]), "param_language");
+    _id
+      .insert_node(label, "param_id", "_node")
+      .place_prop_back(label, "creationDate", Result::kUINT64, _cdate, "param_cdate", "_node")
+      .place_prop_back(label, "locationIP", Result::kSTRING, _ip, "param_ip", "_node")
+      .place_prop_back(label, "browserUsed", Result::kSTRING, _browser, "param_browser", "_node")
+      .place_prop_back(label, "content", Result::kSTRING, _content, "param_content", "_node")
+      .place_prop_back(label, "length", Result::kUINT64, _length, "param_length", "_node")
+      .place_prop_back(label, "imageFile", Result::kSTRING, _image, "param_image", "_node")
+      .place_prop_back(label, "language", Result::kSTRING, _language, "param_language", "_node");
+    b.write_to_query(q_ptr);
+  }
+  void build_name_url(std::vector<std::string> params, Query* q_ptr, label_t label) {
+    size_t idx = 1;
+    StepCtx _id     = b.put_const(Result::kLabeledNodeId, std::stoull(params[idx++]), "param_id", Person);
+    StepCtx _name    = b.put_const(Result::kSTRING,        StringServer::get()->touch(params[idx++]), "param_name");
+    StepCtx _url     = b.put_const(Result::kSTRING,        StringServer::get()->touch(params[idx++]), "param_url");
+    _id
+      .insert_node(label, "param_id", "_node")
+      .place_prop_back(label, "name", Result::kSTRING, _name, "param_name", "_node")
+      .place_prop_back(label, "url", Result::kSTRING, _url, "param_url", "_node");
+    b.write_to_query(q_ptr);
+  }
+ public:
+  void build(std::vector<std::string> params, Query* q_ptr) {
+    check_label_initialized();
+    label_t node_l = _schema->get_label_by_name(params[0]);
+    if (node_l == Person) build_person(params, q_ptr);
+    else if (node_l == City ||
+             node_l == Country ||
+             node_l == Continent ||
+             node_l == Tag ||
+             node_l == TagClass ||
+             node_l == Company ||
+             node_l == University)
+      build_name_url(params, q_ptr, node_l);
+    else if (node_l == Forum)
+      build_forum(params, q_ptr);
+    else if (node_l == Comment ||
+             node_l == Post)
+      build_msg(params, q_ptr, node_l);
+    else
+      throw QueryException("no such labeled node");
+  }
+};
+class LDBCQuerPerson {
+ public:
+  void build(std::vector<std::string> params, Query* q_ptr) {
+    check_label_initialized();
+    LDBCUpdateBuilder ub;
+    ub.getNode({std::stoull(params[0]), Person}, "person", nullptr)
+      .filter_simple([](ResultItem v){return v != 0;}, "person");
+    ub.b.new_col_to_ret(Result::kSTRING, "person", _schema->get_prop_idx("Person", "firstName"), "firstName");
+    ub.b.new_col_to_ret(Result::kSTRING, "person", _schema->get_prop_idx("Person", "lastName"), "lastName");
+    ub.b.new_col_to_ret(Result::kSTRING, "person", _schema->get_prop_idx("Person", "gender"), "gender");
+    ub.b.new_col_to_ret(Result::kUINT64, "person", _schema->get_prop_idx("Person", "birthday"), "birthday");
+    ub.b.new_col_to_ret(Result::kUINT64, "person", _schema->get_prop_idx("Person", "creationDate"), "creationDate");
+    ub.b.new_col_to_ret(Result::kSTRING, "person", _schema->get_prop_idx("Person", "locationIP"), "locationIP");
+    ub.b.new_col_to_ret(Result::kSTRING, "person", _schema->get_prop_idx("Person", "browserUsed"), "browserUsed");
+    ub.b.new_col_to_ret(Result::kSTRING, "person", _schema->get_prop_idx("Person", "speaks"), "speaks");
+    ub.b.new_col_to_ret(Result::kSTRING, "person", _schema->get_prop_idx("Person", "email"), "email");
+    ub.write_to_query(q_ptr);
+  }
+};
+
+class LDBCQueryPost {
+ public:
+  void build(std::vector<std::string> params, Query* q_ptr) {
+    check_label_initialized();
+    LDBCUpdateBuilder ub;
+    ub.getNode({std::stoull(params[0]), Post}, "node", nullptr)
+      .filter_simple([](ResultItem v){return v != 0;}, "node");
+    ub.b.new_col_to_ret(Result::kUINT64, "node", _schema->get_prop_idx("Post", "creationDate"), "creationDate");
+    ub.b.new_col_to_ret(Result::kSTRING, "node", _schema->get_prop_idx("Post", "locationIP"), "locationIP");
+    ub.b.new_col_to_ret(Result::kSTRING, "node", _schema->get_prop_idx("Post", "browserUsed"), "browserUsed");
+    ub.b.new_col_to_ret(Result::kSTRING, "node", _schema->get_prop_idx("Post", "content"), "content");
+    ub.b.new_col_to_ret(Result::kUINT64, "node", _schema->get_prop_idx("Post", "length"), "length");
+    ub.b.new_col_to_ret(Result::kSTRING, "node", _schema->get_prop_idx("Post", "imageFile"), "imageFile");
+    ub.b.new_col_to_ret(Result::kSTRING, "node", _schema->get_prop_idx("Post", "language"), "language");
+    ub.write_to_query(q_ptr);
+  }
+};
+class LDBCQueryComment {
+ public:
+  void build(std::vector<std::string> params, Query* q_ptr) {
+    check_label_initialized();
+    LDBCUpdateBuilder ub;
+    ub.getNode({std::stoull(params[0]), Comment}, "node", nullptr)
+      .filter_simple([](ResultItem v){return v != 0;}, "node");
+    ub.b.new_col_to_ret(Result::kUINT64, "node", _schema->get_prop_idx("Comment", "creationDate"), "creationDate");
+    ub.b.new_col_to_ret(Result::kSTRING, "node", _schema->get_prop_idx("Comment", "locationIP"), "locationIP");
+    ub.b.new_col_to_ret(Result::kSTRING, "node", _schema->get_prop_idx("Comment", "browserUsed"), "browserUsed");
+    ub.b.new_col_to_ret(Result::kSTRING, "node", _schema->get_prop_idx("Comment", "content"), "content");
+    ub.b.new_col_to_ret(Result::kUINT64, "node", _schema->get_prop_idx("Comment", "length"), "length");
+    ub.b.new_col_to_ret(Result::kSTRING, "node", _schema->get_prop_idx("Comment", "imageFile"), "imageFile");
+    ub.b.new_col_to_ret(Result::kSTRING, "node", _schema->get_prop_idx("Comment", "language"), "language");
+    ub.write_to_query(q_ptr);
   }
 };

@@ -4,9 +4,10 @@
 
 class SeqQueryBuilder;
 struct StepCtx {
+  using str = std::string;
   size_t _step_id;
-  QueryStep* _step;
-  SeqQueryBuilder* _builder;
+  QueryStep* _step = nullptr;
+  SeqQueryBuilder* _builder = nullptr;
   // std::vector<size_t> _wrote_cols;
   // std::vector<size_t> _key_cols;
   // StepCtx get_node(label_t label, StepCtx* col_src = nullptr, std::string dst_col_alias="");
@@ -47,6 +48,12 @@ struct StepCtx {
     std::vector<GroupByStep::Aggregator> group_ops,
     std::vector<std::vector<FilterCtx>> filters,
     std::vector<std::string> dst_cols_alias);
+
+  StepCtx place_prop_back(label_t label, std::string prop_name, Result::ColumnType ty, StepCtx & val_ctx, std::string src_col_alias, std::string dst_col_alias);
+  StepCtx insert_node(label_t label, std::string src_col_alias, std::string dst_col_alias);
+  StepCtx insert_edge(label_t label, StepCtx & node2, std::vector<std::string> src_cols_alias, dir_t dir, std::string dst_col_alias);
+
+  StepCtx put_const(Result::ColumnType ty, ResultItem val, std::string col_alias = "", label_t const_label = 0);
 };
 
 class SeqQueryBuilder {
@@ -124,6 +131,30 @@ class SeqQueryBuilder {
     return ctx;
   }
 };
+
+StepCtx StepCtx::put_const(Result::ColumnType ty, ResultItem val, std::string col_alias, label_t const_label) {
+  ConstStep* step = new ConstStep;
+  this->_builder->steps.push_back(step);
+  if (_builder->first_step == nullptr) _builder->first_step = step;
+  StepCtx ctx; ctx._step = step; ctx._step_id = this->_step_id++;; ctx._builder = this->_builder;
+
+  Result* rst = new Result;
+  _builder->result_list.push_back(rst);
+  step->set_rst(rst); 
+  rst->append_schema(ty, col_alias);
+  rst->set_const_label(const_label);
+
+  // step->set_col_to_put({0});
+  // ctx._wrote_cols = {0};
+
+  this->_step->append_next(step);
+
+  rst->append_row();
+  rst->set(0, 0, val);
+  // LOG_VERBOSE("just put a const, print the result:");
+  // rst->print();
+  return ctx;
+}
 
 /**
  * @brief if get node is from edges in result table, the label can be ignored
@@ -262,6 +293,27 @@ StepCtx StepCtx::place_prop(size_t prop_idx, Result::ColumnType ty, std::string 
   // ctx._wrote_cols = {col_to_put};
 
   step->_prop_idx = prop_idx;
+  return ctx;
+}
+
+StepCtx StepCtx::place_prop_back(label_t label, std::string prop_name, Result::ColumnType ty, StepCtx & val_ctx, std::string src_col_alias, std::string dst_col_alias) {
+  // share the same result table.
+  PlacePropColBack* step = new PlacePropColBack;
+  _builder->steps.push_back(step);
+  if (_builder->first_step == nullptr) _builder->first_step = step;
+  StepCtx ctx; ctx._step = step; ctx._step_id = this->_step_id++; ctx._builder = this->_builder;
+
+  step->set_rst(&this->_step->get_rst());
+
+  this->_step->append_next(step);
+  step->set_prev({val_ctx._step});
+
+  size_t src_col = val_ctx._step->get_rst().get_col_idx_by_alias(src_col_alias);
+  size_t col_to_put = step->get_rst().get_col_idx_by_alias(dst_col_alias);
+  step->set_src_col({src_col});
+  step->set_col_to_put({col_to_put});
+
+  step->_prop_idx = SchemaManager::get()->get_prop_idx(label, prop_name);
   return ctx;
 }
 
@@ -517,5 +569,52 @@ StepCtx StepCtx::select_group(
   this->_step->append_next(step);
   step->set_prev({this->_step});
 
+  return ctx;
+}
+
+StepCtx StepCtx::insert_node(label_t label, std::string src_col_alias, std::string dst_col_alias) {
+  CreateNodeStep* step = new CreateNodeStep;
+  _builder->steps.push_back(step);
+  if (_builder->first_step == nullptr) _builder->first_step = step;
+  StepCtx ctx; ctx._step = step; ctx._step_id = this->_step_id++; ctx._builder = this->_builder;
+
+
+  step->set_rst(&this->_step->get_rst());
+
+  size_t col_to_put = step->get_rst().get_cols();
+  step->get_rst().append_schema(Result::kNode, dst_col_alias);
+
+  this->_step->append_next(step);
+  step->set_prev({this->_step});
+
+  step->set_src_col({step->get_rst().get_col_idx_by_alias(src_col_alias)});
+  step->set_col_to_put({col_to_put});
+
+  step->set_label(label);
+  return ctx;
+}
+
+
+StepCtx StepCtx::insert_edge(label_t label, StepCtx & node2, std::vector<std::string> src_cols_alias, dir_t dir, std::string dst_col_alias) {
+  CreateEdgeStep* step = new CreateEdgeStep;
+  _builder->steps.push_back(step);
+  if (_builder->first_step == nullptr) _builder->first_step = step;
+  StepCtx ctx; ctx._step = step; ctx._step_id = this->_step_id++; ctx._builder = this->_builder;
+
+
+  step->set_rst(&this->_step->get_rst());
+
+  size_t col_to_put = step->get_rst().get_cols();
+  step->get_rst().append_schema(Result::kEdge, dst_col_alias);
+
+  this->_step->append_next(step);
+  step->set_prev({this->_step, node2._step});
+
+  step->set_src_col({this->_step->get_rst().get_col_idx_by_alias(src_cols_alias[0]),
+                     node2._step->get_rst().get_col_idx_by_alias(src_cols_alias[1])});
+  step->set_col_to_put({col_to_put});
+
+  step->set_label(label);
+  step->set_dir(dir);
   return ctx;
 }
