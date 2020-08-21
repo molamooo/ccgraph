@@ -80,7 +80,7 @@ class SeqQueryBuilder {
     size_t col = steps.back()->get_rst().get_col_idx_by_alias(col_alias);
     Result* final_table = &steps.back()->get_rst();
     Result::ColumnType col_type = final_table->get_type(col);
-    if (ty != Result::kUINT64 && (col_type == Result::kEdge || col_type == Result::kNode)) throw FatalException("the rst col to return must be value only when only providing a col");
+    if (ty != col_type && (col_type == Result::kEdge || col_type == Result::kNode)) throw FatalException("the rst col to return must be value only when only providing a col");
     rst_cols.push_back({ty, col, QueryRstColType::kColValDirect, std::numeric_limits<size_t>::max(), dst_col_alias});
   }
 
@@ -90,6 +90,13 @@ class SeqQueryBuilder {
     Result::ColumnType col_type = final_table->get_type(col);
     if (col_type != Result::kEdge && col_type != Result::kNode) throw FatalException("the rst col to return must be prop when providing a col and the prop idx");
     rst_cols.push_back({ty, col, QueryRstColType::kProp, prop_idx, dst_col_alias});
+  }
+  void new_col_to_or_ret(Result::ColumnType ty,  std::string col_alias, size_t prop_idx1, size_t prop_idx2, std::string dst_col_alias="") {
+    size_t col = steps.back()->get_rst().get_col_idx_by_alias(col_alias);
+    Result* final_table = &steps.back()->get_rst();
+    Result::ColumnType col_type = final_table->get_type(col);
+    if (col_type != Result::kEdge && col_type != Result::kNode) throw FatalException("the rst col to return must be prop when providing a col and the prop idx");
+    rst_cols.push_back({ty, col, QueryRstColType::kPropOr, prop_idx1, dst_col_alias, prop_idx2});
   }
 
   void new_col_to_ret(Result::ColumnType ty,  std::string col_alias, QueryRstColType spectial_col_type, std::string dst_col_alias="") {
@@ -519,8 +526,8 @@ Result::ColumnType group_rst_type(GroupByStep::Aggregator op, Result::ColumnType
     case GroupByStep::kMin: return src_type;
     case GroupByStep::kSum: return src_type;
     case GroupByStep::kFirst: return src_type;
-    // case GroupByStep::kMakeSet: return Result::kSet;
-    case GroupByStep::kMakeSet: return Result::kSTRING;
+    case GroupByStep::kMakeSet: return Result::kSet;
+    // case GroupByStep::kMakeSet: return Result::kSTRING;
     default: throw FatalException("Unreachable");
   }
 }

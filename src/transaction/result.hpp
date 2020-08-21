@@ -153,8 +153,9 @@ class Result {
     switch (ty) {
       case Result::kNode:
       case Result::kEdge: {
-        if (val == 0) return "0";
-        return "1";
+        // special case only for ldbc, which wants "isNew"
+        if (val == 0) return "TRUE";
+        return "FALSE";
       }
       case Result::kDOUBLE: {
         double d = *(double*)&val;
@@ -183,8 +184,8 @@ class Result {
         ss << d;
         return ss.str();
       }
-      case Result::kSTRING: { return StringServer::get()->get(val); }
-      case Result::kSet: throw Unimplemented("Not implemented set");
+      case Result::kSTRING: { return "\"" + StringServer::get()->get(val) + "\""; }
+      case Result::kSet: { return StringServer::get()->get(val); }
       default: throw FatalException("Unreachable");
     }
   }
@@ -192,16 +193,18 @@ class Result {
     return get_string(get(i, j), get_type(j));
   }
   void print() {
-    std::cout << "|";
+    // std::cout << "|";
     for (size_t j = 0; j < get_cols(); j++) {
-      std::cout << " " << get_col_alias(j) << " |";
+      if (j > 0) std::cout << ", ";
+      std::cout << get_col_alias(j);
     }
     std::cout << "\n";
     if (get_rows() == 0) std::cout << "< result is empty >\n";
     for (size_t i = 0; i < std::min(get_rows(), Config::get()->mid_rst_max_row); i++) {
-      std::cout << "|";
+      // std::cout << "|";
       for (size_t j = 0; j < get_cols(); j++) {
-        std::cout << " " << get_string(i, j) << " |";
+      if (j > 0) std::cout << ", ";
+        std::cout << get_string(i, j);
       }
       std::cout << "\n";
     }

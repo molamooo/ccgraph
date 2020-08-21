@@ -12,6 +12,8 @@ enum QueryRstColType {
   kEdgeLabeledId2,
   kProp,
   kColValDirect,
+  kPropOr,
+  // kIsNull,
 };
 
 struct QueryRstCol {
@@ -20,6 +22,8 @@ struct QueryRstCol {
   QueryRstColType col_type;
   size_t prop_idx;
   std::string alias;
+
+  size_t prop_idx2; // for ldbc, which returns either content or imagefile
 };
 
 class Query {
@@ -60,6 +64,14 @@ class Query {
       for (size_t dst_col = 0; dst_col < rst_cols.size(); dst_col++) {
         size_t src_col = rst_cols[dst_col].col_idx;
         switch (rst_cols[dst_col].col_type) {
+          // case kIsNull: {
+          //   if (last_rst.get_type(src_col) == Result::kEdge || last_rst.get_type(src_col) == Result::kNode) {
+          //     r_to_write[dst_col] = last_rst.get(row, src_col) == 0 ? StringServer::get()->touch("TRUE") : StringServer::get()->touch("FALSE");
+          //   } else {
+          //     throw FatalException("Can not extract prop from non-pointer col");
+          //   }
+          //   break;
+          // }
           case kColValDirect: {
             if (last_rst.get_type(src_col) == Result::kEdge || last_rst.get_type(src_col) == Result::kNode) {
               r_to_write[dst_col] = last_rst.get(row, src_col) == 0 ? 0 : 1;
@@ -80,6 +92,24 @@ class Query {
             } else {
               throw FatalException("Can not extract prop from non-pointer col");
             }
+          }
+          case kPropOr: {
+            ResultItem val1, val2;
+            uint8_t* prop_head; label_t type;
+            if (last_rst.get_type(src_col) == Result::kNode) {
+              Node* n = (Node*)last_rst.get(row, src_col);
+              prop_head = n->_prop; type = n->_type;
+            } else if (last_rst.get_type(src_col) == Result::kEdge) {
+              Edge* e = (Edge*)last_rst.get(row, src_col);
+              prop_head = e->_prop; type = e->_label;
+            } else {
+              throw FatalException("Can not extract prop from non-pointer col");
+            }
+            SchemaManager::get()->get_prop(prop_head, type, rst_cols[dst_col].prop_idx, (uint8_t*)&val1);
+            SchemaManager::get()->get_prop(prop_head, type, rst_cols[dst_col].prop_idx2, (uint8_t*)&val2);
+            if (val1 == 0) r_to_write.at(dst_col) = val2;
+            else r_to_write.at(dst_col) = val1;
+            break;
           }
           case kEdgeLabeledId1: {
             Edge* e = (Edge*)last_rst.get(row, src_col);

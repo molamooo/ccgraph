@@ -111,12 +111,12 @@ class LDBCQuery1 {
     builder.new_col_to_ret(Result::kSTRING, "friend_node", _schema->get_prop_idx("Person", "speaks"), "friendLanguages");
     builder.new_col_to_ret(Result::kSTRING, "city_node", _schema->get_prop_idx("City", "name"), "friendCityName");
 
-    builder.new_col_to_ret(Result::kSTRING, "friendUniversityName", "friendUniversityName");
-    builder.new_col_to_ret(Result::kSTRING, "friendUniversityYear", "friendUniversityYear");
-    builder.new_col_to_ret(Result::kSTRING, "friendUniversityCityName", "friendUniversityCityName");
-    builder.new_col_to_ret(Result::kSTRING, "friendCompanyName", "friendCompanyName");
-    builder.new_col_to_ret(Result::kSTRING, "friendCompanyYear", "friendCompanyYear");
-    builder.new_col_to_ret(Result::kSTRING, "friendCompanyCityName", "friendCompanyCityName");
+    builder.new_col_to_ret(Result::kSet, "friendUniversityName", "friendUniversityName");
+    builder.new_col_to_ret(Result::kSet, "friendUniversityYear", "friendUniversityYear");
+    builder.new_col_to_ret(Result::kSet, "friendUniversityCityName", "friendUniversityCityName");
+    builder.new_col_to_ret(Result::kSet, "friendCompanyName", "friendCompanyName");
+    builder.new_col_to_ret(Result::kSet, "friendCompanyYear", "friendCompanyYear");
+    builder.new_col_to_ret(Result::kSet, "friendCompanyCityName", "friendCompanyCityName");
     builder.write_to_query(q_ptr);
   }
 };
@@ -148,8 +148,9 @@ class LDBCQuery2 {
     builder.new_col_to_ret(Result::kSTRING, "friend_node", _schema->get_prop_idx("Person", "firstName"));
     builder.new_col_to_ret(Result::kSTRING, "friend_node", _schema->get_prop_idx("Person", "lastName"));
     builder.new_col_to_ret(Result::kUINT64, "message_node", kNodeLabeledId);
-    builder.new_col_to_ret(Result::kSTRING, "message_node", _schema->get_prop_idx("Comment", "content"));
-    builder.new_col_to_ret(Result::kSTRING, "message_node", _schema->get_prop_idx("Post", "imageFile"));
+    builder.new_col_to_or_ret(Result::kSTRING, "message_node", _schema->get_prop_idx("Comment", "content"), _schema->get_prop_idx("Post", "imageFile"));
+    // builder.new_col_to_ret(Result::kSTRING, "message_node", _schema->get_prop_idx("Comment", "content"));
+    // builder.new_col_to_ret(Result::kSTRING, "message_node", _schema->get_prop_idx("Post", "imageFile"));
     builder.new_col_to_ret(Result::kUINT64, "message_creation_date");
     builder.write_to_query(q_ptr);
   }
@@ -378,8 +379,6 @@ class LDBCQuery7 {
       .sort({"like_date", "like_person_node", "message_node"}, {false, true, true})
       .select_group({"start_person_node", "like_person_node"}, {"like_date", "message_node"}, {GroupByStep::Aggregator::kFirst, GroupByStep::Aggregator::kFirst}, {{}, {}}, {"max_like_date", "the_message_node"})
       .sort({"max_like_date", "like_person_node"}, {false, true}, 20) // todo: preserve order in selece group
-      // .place_prop(_schema->get_prop_idx("Comment", "creationDate"), Result::kUINT64, "the_message_node", "message_date")
-      // .algeo(kTimeSubMin, {"like_date", "message_date"}, "latency")
       .get_single_edge(knows, dir_bidir, {"like_person_node", "start_person_node"}, "know_edge"); // done: both direction
 
     builder.new_col_to_ret(Result::kUINT64, "like_person_node", QueryRstColType::kNodeLabeledId);
@@ -387,13 +386,11 @@ class LDBCQuery7 {
     builder.new_col_to_ret(Result::kSTRING, "like_person_node", _schema->get_prop_idx("Person", "lastName"));
     builder.new_col_to_ret(Result::kUINT64, "max_like_date");
     builder.new_col_to_ret(Result::kUINT64, "the_message_node", QueryRstColType::kNodeLabeledId);
-    // fixme: make sure the loading procedure is correct
-    builder.new_col_to_ret(Result::kSTRING, "the_message_node", _schema->get_prop_idx("Comment", "content"));
-    builder.new_col_to_ret(Result::kSTRING, "the_message_node", _schema->get_prop_idx("Post", "imageFile"));
+    // fixed: make sure the loading procedure is correct, we have both content and imagefile in both comment and post
+    builder.new_col_to_or_ret(Result::kSTRING, "the_message_node", _schema->get_prop_idx("Comment", "content"), _schema->get_prop_idx("Post", "imageFile"));
     builder.new_col_to_ret(Result::kUINT64, "the_message_node", _schema->get_prop_idx("Post", "creationDate"));
-    // builder.new_col_to_ret(Result::kUINT64, "message_date");
-    // fixme: if return a pointer, the result is changed into a flag
-    builder.new_col_to_ret(Result::kUINT64, "know_edge");
+    // fixed: if return a pointer, the result is changed into a flag
+    builder.new_col_to_ret(Result::kEdge, "know_edge");
     
     builder.write_to_query(q_ptr);
   }
@@ -460,8 +457,9 @@ class LDBCQuery9 {
     builder.new_col_to_ret(Result::kSTRING, "friend_node", _schema->get_prop_idx("Person", "firstName"));
     builder.new_col_to_ret(Result::kSTRING, "friend_node", _schema->get_prop_idx("Person", "lastName"));
     builder.new_col_to_ret(Result::kUINT64, "message_node", QueryRstColType::kNodeLabeledId);
-    builder.new_col_to_ret(Result::kSTRING, "message_node", _schema->get_prop_idx("Comment", "content"));
-    builder.new_col_to_ret(Result::kSTRING, "message_node", _schema->get_prop_idx("Post", "imageFile"));
+    builder.new_col_to_or_ret(Result::kSTRING, "message_node", _schema->get_prop_idx("Comment", "content"), _schema->get_prop_idx("Post", "imageFile"));
+    // builder.new_col_to_ret(Result::kSTRING, "message_node", _schema->get_prop_idx("Comment", "content"));
+    // builder.new_col_to_ret(Result::kSTRING, "message_node", _schema->get_prop_idx("Post", "imageFile"));
     builder.new_col_to_ret(Result::kUINT64, "message_date");
     builder.write_to_query(q_ptr);
   }
@@ -617,7 +615,7 @@ class LDBCQuery12 {
     builder.new_col_to_ret(Result::kUINT64, "friend_node", QueryRstColType::kNodeLabeledId);
     builder.new_col_to_ret(Result::kSTRING, "friend_node", _schema->get_prop_idx("Person", "firstName"));
     builder.new_col_to_ret(Result::kSTRING, "friend_node", _schema->get_prop_idx("Person", "lastName"));
-    builder.new_col_to_ret(Result::kSTRING, "tag_names");
+    builder.new_col_to_ret(Result::kSet, "tag_names");
     builder.new_col_to_ret(Result::kUINT64, "count");
     builder.write_to_query(q_ptr);
   }
@@ -631,8 +629,8 @@ class LDBCNeighbour {
   void build(std::vector<std::string> params, Query* q_ptr) {
     check_label_initialized();
     _person_id = std::stoull(params[0]);
-    _min_depth = std::stoull(params[1]);
-    _max_depth = std::stoull(params[2]);
+    // _min_depth = std::stoull(params[1]);
+    // _max_depth = std::stoull(params[2]);
     SeqQueryBuilder builder;
 
     StepCtx start_node_id_ctx = builder.put_const(Result::kLabeledNodeId, _person_id, "param_person_id", Person);
@@ -640,9 +638,11 @@ class LDBCNeighbour {
     start_node_id_ctx
       .get_node(Person, "param_person_id", "start_person_node")
       .filter_simple([](ResultItem v){return v != 0;}, "start_person_node")
+      .get_all_edge(knows, dir_out, "start_person_node", "knows_edge")
+      .get_node(Person, "knows_edge", "friend_node");
 
     builder.new_col_to_ret(Result::kUINT64, "friend_node", QueryRstColType::kNodeLabeledId);
-    builder.new_col_to_ret(Result::kUINT64, "depth");
+    builder.new_col_to_ret(Result::kUINT64, "knows_edge", 0);
     builder.new_col_to_ret(Result::kSTRING, "friend_node", _schema->get_prop_idx("Person", "firstName"));
     builder.new_col_to_ret(Result::kSTRING, "friend_node", _schema->get_prop_idx("Person", "lastName"));
     builder.write_to_query(q_ptr);
