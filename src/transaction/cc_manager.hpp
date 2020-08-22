@@ -494,14 +494,14 @@ class CCManager2PL : public CCManager {
     for (auto iter : ctx->_lock_history) {
       _locks->GetLock(iter.first).Unlock(iter.second, ctx);
     }
-    for (auto iter : ctx->_org_nodes) {
+    for (auto & iter : ctx->_org_nodes) {
       if (iter.second == nullptr) {
         // this is a node inserted, just ignore it
         continue;
       }
       _allocator->Free(iter.second->_type, iter.second);
     }
-    for (auto iter : ctx->_org_edges) {
+    for (auto & iter : ctx->_org_edges) {
       if (iter.second == nullptr) {
         // this is a node inserted, just ignore it
         continue;
@@ -510,7 +510,7 @@ class CCManager2PL : public CCManager {
     }
   }
   void Abort(CCContex* ctx) {
-    for (auto iter : ctx->_org_nodes) {
+    for (auto & iter : ctx->_org_nodes) {
       if (iter.second == nullptr) {
         // this is a node inserted, just ignore it
         Node* n = _node_index->DeleteNodeViaInternalId(iter.first);
@@ -523,7 +523,7 @@ class CCManager2PL : public CCManager {
       }
       _allocator->Free(iter.second->_type, iter.second);
     }
-    for (auto iter : ctx->_org_edges) {
+    for (auto & iter : ctx->_org_edges) {
       if (iter.second == nullptr) {
         // this is a node inserted, just ignore it
         Edge* e = _edge_index->DeleteEdge(std::get<0>(iter.first), std::get<1>(iter.first), std::get<2>(iter.first));
