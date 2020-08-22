@@ -81,20 +81,32 @@ class CCManager2PL : public CCManager {
     // LOG_VERBOSE("locking %llu with share=%d", hashed, share);
     int state = ctx->Locked(hashed);
     if (state == 0) {
-      return _locks->GetLock(hashed).LockAsync(share, ctx)
-        .via(folly::getGlobalCPUExecutor())
-        .thenValue([this, hashed, share, ctx](folly::Unit){
-          ctx->_lock_history[hashed] = share;
-        });
+      auto f = _locks->GetLock(hashed).LockAsync(share, ctx);
+      if (f.isReady()) {
+        f.value();
+        ctx->_lock_history[hashed] = share;
+        return folly::makeFuture();
+      } else {
+        return std::move(f).via(folly::getGlobalCPUExecutor())
+          .thenValue([this, hashed, share, ctx](folly::Unit){
+            ctx->_lock_history[hashed] = share;
+          });
+      }
     }
     if (state == 2 || share) {
       return folly::makeFuture().via(folly::getGlobalCPUExecutor());
     }
-    return _locks->GetLock(hashed).UpgradeAsync(ctx)
-      .via(folly::getGlobalCPUExecutor())
-      .thenValue([this, hashed, share, ctx](folly::Unit){
-        ctx->_lock_history[hashed] = share;
-      });
+    auto f = _locks->GetLock(hashed).UpgradeAsync(ctx);
+    if (f.isReady()) {
+      f.value();
+      ctx->_lock_history[hashed] = share;
+      return folly::makeFuture();
+    } else {
+      return std::move(f).via(folly::getGlobalCPUExecutor())
+        .thenValue([this, hashed, share, ctx](folly::Unit){
+          ctx->_lock_history[hashed] = share;
+        });
+    }
   }
   VFuture GrantAccessNProp(
       const labeled_id_t n_id, const bool share, CCContex* ctx) {
