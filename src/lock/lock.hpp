@@ -156,7 +156,7 @@ class AsyncRWLock {
     w_locker = nullptr;
     locker_count.fetch_sub(1);
     lk.unlock();
-    _cv.notify_one();
+    _cv.notify_all();
   }
   void Rlock(CCContex* ctx) {
     std::unique_lock<std::mutex> lk(_m);
@@ -226,7 +226,10 @@ class AsyncRWLock {
     }
     locker_count.fetch_sub(1);
     lk.unlock();
-    _cv.notify_one(); // fixme: only notify one, what if notify reader but writer is waiting?
+    _cv.notify_all(); 
+    // fixme: only notify one, what if notify reader but writer is waiting?
+    // fixme: only notify one, but there might be another request that can only it can be granted:
+    //   example: r1 r2, w3(blocked), 1upgrade(blocked), ur2, 3 is checked but waiting. 1 is never checked
   }
  public:
   void Upgrade(CCContex* ctx) {
