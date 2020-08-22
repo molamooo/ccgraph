@@ -1363,9 +1363,11 @@ class Worker {
     return f;
   }
   VFuture ProcessStepRecursive(QueryStep* step) {
-    return ProcessOneStep(step)
+    // fixme: remove sequential
+    // return ProcessOneStep(step)
+    ProcessOneStep(step).wait().get();
       // .via(folly::getGlobalCPUExecutor())
-      .thenValue([this, step](folly::Unit){
+      // .thenValue([this, step](folly::Unit){
         if (Config::get()->print_mid_rst) {
           LOG_VERBOSE("printing mid result");
           step->get_rst().print();
@@ -1381,12 +1383,17 @@ class Worker {
         // LOG_VERBOSE("running next step");
         QueryStep* next_step = step->get_next(0);
         return ProcessStepRecursive(next_step);
-      });
+      // });
   }
   VFuture ProcessQuery(std::shared_ptr<Query> q) {
     // the initial point of processing a query, no reentrant
     QueryStep* start = q->get_first_step();
-    return ProcessStepRecursive(start)
+    // fixme: remove sequential
+    // return folly::makeFuture().via(folly::getGlobalCPUExecutor()).thenValue([this, start](folly::Unit){
+    //   return ProcessStepRecursive(start);
+    // }).thenValue([this, q](folly::Unit){
+    ProcessStepRecursive(start).wait().get();
+    return folly::makeFuture()
       .thenValue([this, q](folly::Unit){
         LOG_DEBUG("no error, trying to commit");
         if (_ccgraph->CommitCheck(q->get_cc_ctx())) {
@@ -1398,7 +1405,7 @@ class Worker {
           q->_rc = kAbort;
         }
         // todo: reply to client
-      }).thenError(folly::tag_t<std::exception&>{}, [this,q](std::exception const & e){
+      }).thenError(folly::tag_t<AbortException&>{}, [this,q](AbortException const & e){
         if (dynamic_cast<const AbortException*>(&e)) {
           // std::cout << "Abort Error : " <<  e.what() << "\n";
           _ccgraph->Abort(q->get_cc_ctx());
