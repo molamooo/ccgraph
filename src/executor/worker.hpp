@@ -1364,10 +1364,10 @@ class Worker {
   }
   VFuture ProcessStepRecursive(QueryStep* step) {
     // fixme: remove sequential
-    // return ProcessOneStep(step)
-    ProcessOneStep(step).wait().get();
-      // .via(folly::getGlobalCPUExecutor())
-      // .thenValue([this, step](folly::Unit){
+    // ProcessOneStep(step).wait().get();
+    return ProcessOneStep(step)
+      .via(folly::getGlobalCPUExecutor())
+      .thenValue([this, step](folly::Unit){
         if (Config::get()->print_mid_rst) {
           LOG_VERBOSE("printing mid result");
           step->get_rst().print();
@@ -1383,18 +1383,18 @@ class Worker {
         // LOG_VERBOSE("running next step");
         QueryStep* next_step = step->get_next(0);
         return ProcessStepRecursive(next_step);
-      // });
+      });
   }
   VFuture ProcessQuery(std::shared_ptr<Query> q) {
     // the initial point of processing a query, no reentrant
     QueryStep* start = q->get_first_step();
     // fixme: remove sequential
-    // return folly::makeFuture().via(folly::getGlobalCPUExecutor()).thenValue([this, start](folly::Unit){
-    //   return ProcessStepRecursive(start);
-    // }).thenValue([this, q](folly::Unit){
-    ProcessStepRecursive(start).wait().get();
-    return folly::makeFuture()
-      .thenValue([this, q](folly::Unit){
+    // ProcessStepRecursive(start).wait().get();
+    // return folly::makeFuture()
+    //   .thenValue([this, q](folly::Unit){
+    return folly::makeFuture().via(folly::getGlobalCPUExecutor()).thenValue([this, start](folly::Unit){
+      return ProcessStepRecursive(start);
+    }).thenValue([this, q](folly::Unit){
         LOG_DEBUG("no error, trying to commit");
         if (_ccgraph->CommitCheck(q->get_cc_ctx())) {
           q->write_final_rst();

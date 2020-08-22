@@ -9,7 +9,7 @@
 #include <condition_variable>
 #include <iostream>
 
-// #define QUEUED_LOCK
+#define QUEUED_LOCK
 #ifdef QUEUED_LOCK
 #define RWLOCK_T AsyncQueueRWLock
 #else
@@ -546,6 +546,10 @@ class AsyncQueueRWLock {
       _latch.clear();
       return folly::makeFuture();
     } else {
+      if (should_abort(ctx)) {
+        _latch.clear();
+        throw CCFail("conflict");
+      }
       w_waiter++;
       // fixme: check ts to see abort
       _upgrade_waiters.emplace(false, ctx);
