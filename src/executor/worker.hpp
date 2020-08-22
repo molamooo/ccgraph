@@ -900,29 +900,31 @@ class Worker {
     // std::vector<Node*> start_nodes = prev->get_rst();
     auto f = folly::makeFuture();
     // todo: assert the type is node;
+    // bug fix: there is racing!!!!!!
     for (size_t i = 0; i < prev->get_rst().get_rows(); i++) {
-      Node* n = (Node*)(prev->get_rst().get(i, step->get_src_col()));
-      if (n == nullptr) {
-        step->get_rst().append_row(i, prev->get_rst());
-        step->get_rst().set(step->get_rst().get_rows()-1, step->get_col_to_put(), 0);
-        continue;
-      }
-      f = std::move(f).thenValue([this, step, n](folly::Unit){
-        return _ccgraph->GetAllNeighbour(step->get_label(), n->_internal_id, step->get_dir(), step->get_cc_ctx());
-      }).thenValue([this, step, i, prev](sptr<std::vector<Node*>> rst){
-        bool placed = false;
-        for (Node* n : *rst) {
-          if (step->_filter_node_label && n->_type != step->_node_label) {
-            continue;
-          }
-          step->get_rst().append_row(i, prev->get_rst());
-          step->get_rst().set(step->get_rst().get_rows()-1, step->get_col_to_put(), (ResultItem)n);
-          placed = true;
-        }
-        if (!placed && step->_optional) {
+      f = std::move(f).thenValue([this, prev, step, i](folly::Unit){
+        Node* n = (Node*)(prev->get_rst().get(i, step->get_src_col()));
+        if (n == nullptr) {
           step->get_rst().append_row(i, prev->get_rst());
           step->get_rst().set(step->get_rst().get_rows()-1, step->get_col_to_put(), 0);
+          return folly::makeFuture();
         }
+        return _ccgraph->GetAllNeighbour(step->get_label(), n->_internal_id, step->get_dir(), step->get_cc_ctx())
+          .thenValue([this, step, i, prev](sptr<std::vector<Node*>> rst){
+            bool placed = false;
+            for (Node* n : *rst) {
+              if (step->_filter_node_label && n->_type != step->_node_label) {
+                continue;
+              }
+              step->get_rst().append_row(i, prev->get_rst());
+              step->get_rst().set(step->get_rst().get_rows()-1, step->get_col_to_put(), (ResultItem)n);
+              placed = true;
+            }
+            if (!placed && step->_optional) {
+              step->get_rst().append_row(i, prev->get_rst());
+              step->get_rst().set(step->get_rst().get_rows()-1, step->get_col_to_put(), 0);
+            }
+          });
       });
     }
     return f;
@@ -933,23 +935,24 @@ class Worker {
     auto f = folly::makeFuture();
     // todo: assert the type is node;
     for (size_t i = 0; i < prev->get_rst().get_rows(); i++) {
-      Node* n = (Node*)(prev->get_rst().get(i, step->get_src_col()));
-      if (n == nullptr) {
-        step->get_rst().append_row(i, prev->get_rst());
-        step->get_rst().set(step->get_rst().get_rows()-1, step->get_col_to_put(), 0);
-        continue;
-      }
-      f = std::move(f).thenValue([this, step, n](folly::Unit){
-        return _ccgraph->GetAllEdge(step->get_label(), n->_internal_id, step->get_dir(), step->get_cc_ctx());
-      }).thenValue([this, step, i, prev](sptr<std::vector<Edge*>> rst){
-        if (rst->size() == 0 && step->_optional) {
+      f = std::move(f).thenValue([this, prev, step, i](folly::Unit){
+        Node* n = (Node*)(prev->get_rst().get(i, step->get_src_col()));
+        if (n == nullptr) {
           step->get_rst().append_row(i, prev->get_rst());
           step->get_rst().set(step->get_rst().get_rows()-1, step->get_col_to_put(), 0);
+          return folly::makeFuture();
         }
-        for (Edge* e : *rst) {
-          step->get_rst().append_row(i, prev->get_rst());
-          step->get_rst().set(step->get_rst().get_rows()-1, step->get_col_to_put(), (ResultItem)e);
-        }
+        return _ccgraph->GetAllEdge(step->get_label(), n->_internal_id, step->get_dir(), step->get_cc_ctx())
+          .thenValue([this, step, i, prev](sptr<std::vector<Edge*>> rst){
+            if (rst->size() == 0 && step->_optional) {
+              step->get_rst().append_row(i, prev->get_rst());
+              step->get_rst().set(step->get_rst().get_rows()-1, step->get_col_to_put(), 0);
+            }
+            for (Edge* e : *rst) {
+              step->get_rst().append_row(i, prev->get_rst());
+              step->get_rst().set(step->get_rst().get_rows()-1, step->get_col_to_put(), (ResultItem)e);
+            }
+          });
       });
     }
     return f;
