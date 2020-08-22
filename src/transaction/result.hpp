@@ -100,7 +100,7 @@ class Result {
   }
 
   void force_change_schema(const size_t col, const ColumnType ty) {
-    _col_types[col] = ty;
+    _col_types.at(col) = ty;
   }
   void append_schema(ColumnType ty, std::string col_alias="") {
     _col_types.push_back(ty);
@@ -121,15 +121,21 @@ class Result {
   //   _rsts.push_back(row);
   //   _n_rows++;
   // }
-  void append_row(const size_t i, const Result & rst) {
+  ResultRow & append_row(const size_t i, const Result & rst) {
     // todo: check schema
     for (size_t col = 0; col < rst.get_cols(); col++) {
       if (rst.get_type(col) != get_type(col)) throw QueryException("Mismatch col type");
     }
     _rsts.push_back(rst._rsts.at(i));
+    // ResultRow& r = append_row();
+    // for (size_t col = 0; col < rst.get_cols(); col++) {
+    //   r.at(col) = rst.get(i, col);
+    // }
+    // return r;
     // todo: expend to fit?
     _rsts.back().resize(_n_cols);
     _n_rows++;
+    return _rsts.back();
   }
   const ResultRow & get_row(size_t i) const {
     return _rsts.at(i);
@@ -143,7 +149,7 @@ class Result {
   std::string get_col_alias(size_t col) const {return _col_alias.at(col);}
   size_t get_col_idx_by_alias(std::string alias) const {
     for (size_t i = 0; i < _col_alias.size(); i++) {
-      if (_col_alias[i] == alias) return i;
+      if (_col_alias.at(i) == alias) return i;
     }
     throw FatalException(Formatter() << "The col alias is not found:" << alias);
   }
@@ -212,7 +218,7 @@ class Result {
       std::cout << "This is not all. we have " << get_rows() << " rows in total\n";
     }
   }
-  void set(size_t i, size_t j, ResultItem v) { _rsts.at(i)[j] = v; }
+  void set(size_t i, size_t j, ResultItem v) { _rsts.at(i).at(j) = v; }
 
   std::vector<ResultRow> & get_rst_table() { return _rsts; }
 

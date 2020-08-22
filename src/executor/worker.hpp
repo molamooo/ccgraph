@@ -406,32 +406,32 @@ class Worker {
     std::vector<size_t> key_cols;
     std::vector<Result::ColumnType> orig_col_types;
     Result * original_table = nullptr;
-    void init(std::vector<GroupByStep::GroupCtx> & ctxs,
+    void init(std::vector<GroupByStep::GroupCtx> & ctxs_in,
               std::vector<Result::ColumnType> types,
               std::vector<size_t> key_cols,
               const ResultRow & key,
               Result* orig_table) {
       this->original_table = orig_table;
       this->orig_col_types = types;
-      this->ctxs = &ctxs;
+      this->ctxs = &ctxs_in;
       this->key_cols = key_cols;
       key_example = key;
 
-      cols.resize(ctxs.size());
-      for (size_t i = 0; i < ctxs.size(); i++) {
-        cols[i].init(types[ctxs[i]._src_col], ctxs[i]._op, ctxs[i]._filters, original_table);
+      cols.resize(ctxs->size());
+      for (size_t i = 0; i < ctxs->size(); i++) {
+        cols.at(i).init(types.at(ctxs->at(i)._src_col), ctxs->at(i)._op, ctxs->at(i)._filters, original_table);
       }
     }
     void collect(const ResultRow & row) {
       for (size_t i = 0; i < ctxs->size(); i++) {
-        // LOG_VERBOSE("collecting a row, now the src_col is %d", (*ctxs)[i]._src_col);
-        cols[i].collect(row[(*ctxs)[i]._src_col], row);
+        // LOG_VERBOSE("collecting a row, now the src_col is %d", (*ctxs).at(i)._src_col);
+        cols.at(i).collect(row.at((*ctxs).at(i)._src_col), row);
       }
     }
     void write_back(Result & dst) {
       ResultRow & row = dst.append_row();
       for (size_t i = 0; i < key_cols.size(); i++) {
-        row[i] = key_example.at(key_cols.at(i));
+        row.at(i) = key_example.at(key_cols.at(i));
       }
       for (size_t k = 0; k < cols.size(); k++) {
         if (dst.get_type(ctxs->at(k)._dst_col) != cols.at(k).dst_type) {
@@ -439,11 +439,11 @@ class Worker {
         }
         if (cols.at(k).op == GroupByStep::kAvg) {
           double &sum = *(double*)&cols.at(k).main_rst;
-          row[ctxs->at(k)._dst_col] = sum / cols.at(k).cnt;
+          row.at(ctxs->at(k)._dst_col) = sum / cols.at(k).cnt;
         } else if (cols.at(k).op == GroupByStep::kMakeSet) {
-          row[ctxs->at(k)._dst_col] = StringServer::get()->touch("[" + cols.at(k).make_set_rst + "]");
+          row.at(ctxs->at(k)._dst_col) = StringServer::get()->touch("[" + cols.at(k).make_set_rst + "]");
         } else {
-          row[ctxs->at(k)._dst_col] = cols.at(k).main_rst;
+          row.at(ctxs->at(k)._dst_col) = cols.at(k).main_rst;
         }
       }
     }
@@ -458,7 +458,7 @@ class Worker {
       size_t hash_rst = 0;
       for (size_t col : _key_cols) {
         ResultItem r = k.at(col);
-        switch (_col_types[col]) {
+        switch (_col_types.at(col)) {
           case Result::kNode: {
             Node *n1 = (Node*)r;
             if (n1 == nullptr) {
@@ -506,7 +506,7 @@ class Worker {
     bool operator()(const ResultRow& lhs, const ResultRow& rhs) const {
       for (size_t col : _key_cols) {
         ResultItem r1 = lhs.at(col), r2 = rhs.at(col);
-        if (compare_item(r1, r2, _col_types[col], _col_types[col], CompareOp::kNe))
+        if (compare_item(r1, r2, _col_types.at(col), _col_types.at(col), CompareOp::kNe))
           return false;
         // switch (_col_types[idx]) {
         //   case Result::kNode: {
@@ -588,8 +588,8 @@ class Worker {
         bool increase = _order.at(i);
         CompareOp op = increase ? CompareOp::kL : CompareOp::kG;
         ResultItem r1 = lhs.at(col), r2 = rhs.at(col);
-        if (compare_item(r1, r2, _col_types[col], _col_types[col], CompareOp::kEq)) continue;
-        return compare_item(r1, r2, _col_types[col], _col_types[col], op);
+        if (compare_item(r1, r2, _col_types.at(col), _col_types.at(col), CompareOp::kEq)) continue;
+        return compare_item(r1, r2, _col_types.at(col), _col_types.at(col), op);
         // switch (_col_types[col]) {
         //   case Result::kNode: {
         //     Node *n1 = (Node*)r1, *n2 = (Node*)r2;

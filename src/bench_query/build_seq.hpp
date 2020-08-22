@@ -191,7 +191,7 @@ StepCtx StepCtx::get_node(label_t label, std::string src_col_alias, std::string 
 
   step->set_label(label);
   if (_builder->col_get_all_edge_to_col_src_node.find(src_col_alias) != _builder->col_get_all_edge_to_col_src_node.end())
-    step->_src_node_col_alias = _builder->col_get_all_edge_to_col_src_node[src_col_alias];
+    step->_src_node_col_alias = _builder->col_get_all_edge_to_col_src_node.at(src_col_alias);
 
   // LOG_VERBOSE("just made a get node step, print the result:");
   // step->get_rst().print();
@@ -212,9 +212,9 @@ StepCtx StepCtx::get_neighbour_varlen(label_t label, dir_t dir, size_t min_depth
   step->get_rst().copy_schema(this->_step->get_rst());
 
   size_t col_to_put = step->get_rst().get_cols();
-  step->get_rst().append_schema(Result::kNode, dst_col_alias[0]);
+  step->get_rst().append_schema(Result::kNode, dst_col_alias.at(0));
   size_t depth_col = step->get_rst().get_cols();
-  step->get_rst().append_schema(Result::kUINT64, dst_col_alias[1]);
+  step->get_rst().append_schema(Result::kUINT64, dst_col_alias.at(1));
 
   this->_step->append_next(step);
   step->set_prev({this->_step});
@@ -342,7 +342,7 @@ StepCtx StepCtx::filter(StepCtx & oprand, CompareOp op, std::vector<std::string>
   this->_step->append_next(step);
   step->set_prev({this->_step, oprand._step});
 
-  step->set_src_col({step->get_rst().get_col_idx_by_alias(src_col_alias[0]), oprand._step->get_rst().get_col_idx_by_alias(src_col_alias[1])});
+  step->set_src_col({step->get_rst().get_col_idx_by_alias(src_col_alias.at(0)), oprand._step->get_rst().get_col_idx_by_alias(src_col_alias.at(1))});
   // step->set_col_to_put({col_to_put});
 
   step->_filter_op = op;
@@ -449,7 +449,7 @@ StepCtx StepCtx::get_single_edge(label_t label, dir_t dir, StepCtx* second_id, s
   this->_step->append_next(step);
   step->set_prev({this->_step, second_id->_step});
 
-  step->set_src_col({step->get_rst().get_col_idx_by_alias(src_col_alias[0]), step->get_rst().get_col_idx_by_alias(src_col_alias[1])});
+  step->set_src_col({step->get_rst().get_col_idx_by_alias(src_col_alias.at(0)), step->get_rst().get_col_idx_by_alias(src_col_alias.at(1))});
   step->set_col_to_put({col_to_put});
   // ctx._wrote_cols = {col_to_put};
 
@@ -470,8 +470,8 @@ StepCtx StepCtx::algeo(MathOp op, StepCtx & oprand2, std::vector<std::string> sr
   StepCtx ctx; ctx._step = step; ctx._step_id = this->_step_id++; ctx._builder = this->_builder;
 
   step->set_rst(&this->_step->get_rst());
-  size_t src_col1 = step->get_rst().get_col_idx_by_alias(src_col_alias[0]);
-  size_t src_col2 = step->get_rst().get_col_idx_by_alias(src_col_alias[1]);
+  size_t src_col1 = step->get_rst().get_col_idx_by_alias(src_col_alias.at(0));
+  size_t src_col2 = step->get_rst().get_col_idx_by_alias(src_col_alias.at(1));
 
   size_t col_to_put = step->get_rst().get_cols();
   if (step->get_rst().get_type(src_col1) != 
@@ -560,12 +560,12 @@ StepCtx StepCtx::select_group(
 
   for (size_t i = 0; i < src_cols_alias.size(); i++) {
     size_t src_col = this->_step->get_rst().get_col_idx_by_alias(src_cols_alias.at(i));
-    step->get_rst().append_schema(group_rst_type( group_ops[i], this->_step->get_rst().get_type(src_col) ), dst_cols_alias.at(i));
+    step->get_rst().append_schema(group_rst_type( group_ops.at(i), this->_step->get_rst().get_type(src_col) ), dst_cols_alias.at(i));
     GroupByStep::GroupCtx group_ctx;
-    group_ctx._op = group_ops[i];
+    group_ctx._op = group_ops.at(i);
     group_ctx._src_col = src_col;
     group_ctx._dst_col = cur_col_to_put;
-    group_ctx._filters = filters[i];
+    group_ctx._filters = filters.at(i);
     // ctx._wrote_cols.push_back(cur_col_to_put);
     group_ctxs.push_back(group_ctx);
     cur_col_to_put++;
@@ -617,8 +617,8 @@ StepCtx StepCtx::insert_edge(label_t label, StepCtx & node2, std::vector<std::st
   this->_step->append_next(step);
   step->set_prev({this->_step, node2._step});
 
-  step->set_src_col({this->_step->get_rst().get_col_idx_by_alias(src_cols_alias[0]),
-                     node2._step->get_rst().get_col_idx_by_alias(src_cols_alias[1])});
+  step->set_src_col({this->_step->get_rst().get_col_idx_by_alias(src_cols_alias.at(0)),
+                     node2._step->get_rst().get_col_idx_by_alias(src_cols_alias.at(1))});
   step->set_col_to_put({col_to_put});
 
   step->set_label(label);

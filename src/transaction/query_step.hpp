@@ -77,7 +77,7 @@ class QueryStep {
   virtual OperatorType get_type() = 0;
 
   virtual size_t get_prev_count() = 0;
-  QueryStep* get_prev(const size_t idx) { return _prevs[idx]; }
+  QueryStep* get_prev(const size_t idx) { return _prevs.at(idx); }
   virtual void set_prev(std::vector<QueryStep*> prevs) {
     if (prevs.size() != get_prev_count()) throw QueryException("prev size mismatch");
     _prevs = prevs;
@@ -92,7 +92,7 @@ class QueryStep {
   dir_t get_dir() const { throw QueryException("Not inherited get_dir"); }
   void  set_dir(dir_t) { throw QueryException("Not inherited set_dir"); }
 
-  size_t get_src_col(const size_t idx) { return _src_cols[idx]; }
+  size_t get_src_col(const size_t idx) { return _src_cols.at(idx); }
   size_t  get_src_col() { return get_src_col(0); }
   void set_src_col(std::vector<size_t> src_cols) {
     if (src_cols.size() != get_prev_count()) throw QueryException("prev size mismatch with src col size");
@@ -102,7 +102,7 @@ class QueryStep {
   virtual size_t get_dst_col_count() = 0;
   virtual size_t get_col_to_put(const size_t idx) { 
     if (get_dst_col_count() <= idx)  throw QueryException("get col_to_put out of boundry"); 
-    return _cols_to_put[idx];
+    return _cols_to_put.at(idx);
   }
   size_t  get_col_to_put() { return get_col_to_put(0); }
   void set_col_to_put(std::vector<size_t> cols_to_put) {

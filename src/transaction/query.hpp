@@ -44,7 +44,7 @@ class Query {
  public:
   RetCode _rc;
   QueryStep* get_first_step() { return _first_step; }
-  QueryStep* get_step(const size_t idx) { return _steps[idx]; }
+  QueryStep* get_step(const size_t idx) { return _steps.at(idx); }
   size_t get_nstep() { return _steps.size(); }
   CCContex* get_cc_ctx() const { return _cc_ctx; }
   uint64_t get_ts() const { return _ts; }
@@ -56,14 +56,14 @@ class Query {
   void write_final_rst() {
     Result & last_rst = _steps.back()->get_rst();
     for (size_t dst_col = 0; dst_col < rst_cols.size(); dst_col++) {
-      final_rst.append_schema(rst_cols[dst_col].ty, rst_cols[dst_col].alias);
+      final_rst.append_schema(rst_cols.at(dst_col).ty, rst_cols.at(dst_col).alias);
     }
 
     for (size_t row = 0; row < last_rst.get_rows(); row++) {
       auto & r_to_write = final_rst.append_row();
       for (size_t dst_col = 0; dst_col < rst_cols.size(); dst_col++) {
-        size_t src_col = rst_cols[dst_col].col_idx;
-        switch (rst_cols[dst_col].col_type) {
+        size_t src_col = rst_cols.at(dst_col).col_idx;
+        switch (rst_cols.at(dst_col).col_type) {
           // case kIsNull: {
           //   if (last_rst.get_type(src_col) == Result::kEdge || last_rst.get_type(src_col) == Result::kNode) {
           //     r_to_write[dst_col] = last_rst.get(row, src_col) == 0 ? StringServer::get()->touch("TRUE") : StringServer::get()->touch("FALSE");
@@ -74,20 +74,20 @@ class Query {
           // }
           case kColValDirect: {
             if (last_rst.get_type(src_col) == Result::kEdge || last_rst.get_type(src_col) == Result::kNode) {
-              r_to_write[dst_col] = last_rst.get(row, src_col) == 0 ? 0 : 1;
+              r_to_write.at(dst_col) = last_rst.get(row, src_col) == 0 ? 0 : 1;
             } else {
-              r_to_write[dst_col] = last_rst.get(row, src_col);
+              r_to_write.at(dst_col) = last_rst.get(row, src_col);
             }
             break;
           }
           case kProp: {
             if (last_rst.get_type(src_col) == Result::kNode) {
               Node* n = (Node*)last_rst.get(row, src_col);
-              SchemaManager::get()->get_prop(n->_prop, n->_type, rst_cols[dst_col].prop_idx, (uint8_t*)(&r_to_write.at(dst_col)));
+              SchemaManager::get()->get_prop(n->_prop, n->_type, rst_cols.at(dst_col).prop_idx, (uint8_t*)(&r_to_write.at(dst_col)));
               break;
             } else if (last_rst.get_type(src_col) == Result::kEdge) {
               Edge* e = (Edge*)last_rst.get(row, src_col);
-              SchemaManager::get()->get_prop(e->_prop, e->_label, rst_cols[dst_col].prop_idx, (uint8_t*)(&r_to_write.at(dst_col)));
+              SchemaManager::get()->get_prop(e->_prop, e->_label, rst_cols.at(dst_col).prop_idx, (uint8_t*)(&r_to_write.at(dst_col)));
               break;
             } else {
               throw FatalException("Can not extract prop from non-pointer col");
@@ -105,25 +105,25 @@ class Query {
             } else {
               throw FatalException("Can not extract prop from non-pointer col");
             }
-            SchemaManager::get()->get_prop(prop_head, type, rst_cols[dst_col].prop_idx, (uint8_t*)&val1);
-            SchemaManager::get()->get_prop(prop_head, type, rst_cols[dst_col].prop_idx2, (uint8_t*)&val2);
+            SchemaManager::get()->get_prop(prop_head, type, rst_cols.at(dst_col).prop_idx, (uint8_t*)&val1);
+            SchemaManager::get()->get_prop(prop_head, type, rst_cols.at(dst_col).prop_idx2, (uint8_t*)&val2);
             if (val1 == 0) r_to_write.at(dst_col) = val2;
             else r_to_write.at(dst_col) = val1;
             break;
           }
           case kEdgeLabeledId1: {
             Edge* e = (Edge*)last_rst.get(row, src_col);
-            r_to_write[dst_col] = e->_external_id1.id;
+            r_to_write.at(dst_col) = e->_external_id1.id;
             break;
           }
           case kEdgeLabeledId2: {
             Edge* e = (Edge*)last_rst.get(row, src_col);
-            r_to_write[dst_col] = e->_external_id2.id;
+            r_to_write.at(dst_col) = e->_external_id2.id;
             break;
           }
           case kNodeLabeledId: {
             Node* n = (Node*)last_rst.get(row, src_col);
-            r_to_write[dst_col] = n->_external_id.id;
+            r_to_write.at(dst_col) = n->_external_id.id;
             break;
           }
           case kLabel: throw Unimplemented("No query should return label as rst");
