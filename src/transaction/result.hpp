@@ -170,7 +170,7 @@ class Result {
       }
       case Result::kUINT8:  {
         uint8_t d = *(uint8_t*)&val;
-        ss << d;
+        ss << (uint32_t)d;
         return ss.str();
       }
       case Result::kUINT32:  {

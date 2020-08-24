@@ -43,6 +43,7 @@ class Query {
 
  public:
   RetCode _rc;
+  std::string _abort_msg;
   QueryStep* get_first_step() { return _first_step; }
   QueryStep* get_step(const size_t idx) { return _steps.at(idx); }
   size_t get_nstep() { return _steps.size(); }

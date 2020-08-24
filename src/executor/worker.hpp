@@ -764,8 +764,10 @@ class Worker {
     }
     size_t n_rows = std::max(r1.get_rows(),  r2.get_rows());
 
+    ResultItem v1 = r1.get(0, col1), v2 = r2.get(0, col2);
     for (size_t i = 0; i < n_rows; i++) {
-      ResultItem v1 = r1.get(i, col1), v2 = r2.get(i, col2);
+      if (!prev1_single) v1 = r1.get(i, col1);
+      if (!prev2_single) v2 = r2.get(i, col2);
       r.set(i, step->get_col_to_put(0), algeo_item(v1, v2, ty1, ty2, step->_op));
     }
   }
@@ -1410,6 +1412,7 @@ class Worker {
           // std::cout << "Abort Error : " <<  e.what() << "\n";
           _ccgraph->Abort(q->get_cc_ctx());
           q->_rc = kAbort;
+          q->_abort_msg = e.what();
         } else {
           LOG_INFO("Fatal error: %s", e.what());
           // todo: exit gracefully

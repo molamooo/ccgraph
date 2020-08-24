@@ -471,7 +471,7 @@ StepCtx StepCtx::algeo(MathOp op, StepCtx & oprand2, std::vector<std::string> sr
 
   step->set_rst(&this->_step->get_rst());
   size_t src_col1 = step->get_rst().get_col_idx_by_alias(src_col_alias.at(0));
-  size_t src_col2 = step->get_rst().get_col_idx_by_alias(src_col_alias.at(1));
+  size_t src_col2 = oprand2._step->get_rst().get_col_idx_by_alias(src_col_alias.at(1));
 
   size_t col_to_put = step->get_rst().get_cols();
   if (step->get_rst().get_type(src_col1) != 

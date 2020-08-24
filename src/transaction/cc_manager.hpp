@@ -416,7 +416,7 @@ class CCManager2PL : public CCManager {
     return GrantAccessEProp(label, ex_id1, ex_id2, false, ctx)
       .thenValue([this, ctx, ex_id1, ex_id2, label](folly::Unit)->Edge*{
         Node* n1 = _node_index->GetNodeViaLabeledId(ex_id1), *n2 = _node_index->GetNodeViaLabeledId(ex_id2);
-        if (n1 == nullptr || n2 == nullptr) throw FatalException("Internal id does not exist");
+        if (n1 == nullptr || n2 == nullptr) throw FatalException("insert edge, but node id does not exist");
         Edge* e = _edge_index->GetEdge(label, n1->_internal_id, n2->_internal_id);
         if (e == nullptr) throw AbortException("key not exist");
         if (ctx->_org_edges.find(std::make_tuple(label, n1->_internal_id, n2->_internal_id)) != ctx->_org_edges.end()) {

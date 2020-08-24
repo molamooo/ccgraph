@@ -11,4 +11,5 @@ enum CompareOp {
 enum RetCode {
   kOk = 0,
   kAbort,
+  kFatal,
 };
