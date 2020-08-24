@@ -1,3 +1,5 @@
+#pragma once
+
 #include "query_step.hpp"
 #include "query.hpp"
 #include "schema.hpp"
@@ -48,9 +50,12 @@ struct StepCtx {
     std::vector<GroupByStep::Aggregator> group_ops,
     std::vector<std::vector<FilterCtx>> filters,
     std::vector<std::string> dst_cols_alias);
-
+  // different table
   StepCtx place_prop_back(label_t label, std::string prop_name, Result::ColumnType ty, StepCtx & val_ctx, std::string src_col_alias, std::string dst_col_alias);
+  // same table
+  StepCtx place_prop_back(label_t label, std::string prop_name, Result::ColumnType ty, std::string src_col_alias, std::string dst_col_alias);
   StepCtx insert_node(label_t label, std::string src_col_alias, std::string dst_col_alias);
+  StepCtx update_node(label_t label, std::string src_col_alias, std::string dst_col_alias);
   StepCtx insert_edge(label_t label, StepCtx & node2, std::vector<std::string> src_cols_alias, dir_t dir, std::string dst_col_alias);
 
   StepCtx put_const(Result::ColumnType ty, ResultItem val, std::string col_alias = "", label_t const_label = 0);
@@ -323,6 +328,26 @@ StepCtx StepCtx::place_prop_back(label_t label, std::string prop_name, Result::C
   step->_prop_idx = SchemaManager::get()->get_prop_idx(label, prop_name);
   return ctx;
 }
+StepCtx StepCtx::place_prop_back(label_t label, std::string prop_name, Result::ColumnType ty, std::string src_col_alias, std::string dst_col_alias) {
+  // share the same result table.
+  PlacePropColBack* step = new PlacePropColBack;
+  _builder->steps.push_back(step);
+  if (_builder->first_step == nullptr) _builder->first_step = step;
+  StepCtx ctx; ctx._step = step; ctx._step_id = this->_step_id++; ctx._builder = this->_builder;
+
+  step->set_rst(&this->_step->get_rst());
+
+  this->_step->append_next(step);
+  step->set_prev({this->_step});
+
+  size_t src_col = this->_step->get_rst().get_col_idx_by_alias(src_col_alias);
+  size_t col_to_put = step->get_rst().get_col_idx_by_alias(dst_col_alias);
+  step->set_src_col({src_col});
+  step->set_col_to_put({col_to_put});
+
+  step->_prop_idx = SchemaManager::get()->get_prop_idx(label, prop_name);
+  return ctx;
+}
 
 StepCtx StepCtx::filter(StepCtx & oprand, CompareOp op, std::vector<std::string> src_col_alias) {
   // do not share the same result table.
@@ -581,6 +606,27 @@ StepCtx StepCtx::select_group(
 
 StepCtx StepCtx::insert_node(label_t label, std::string src_col_alias, std::string dst_col_alias) {
   CreateNodeStep* step = new CreateNodeStep;
+  _builder->steps.push_back(step);
+  if (_builder->first_step == nullptr) _builder->first_step = step;
+  StepCtx ctx; ctx._step = step; ctx._step_id = this->_step_id++; ctx._builder = this->_builder;
+
+
+  step->set_rst(&this->_step->get_rst());
+
+  size_t col_to_put = step->get_rst().get_cols();
+  step->get_rst().append_schema(Result::kNode, dst_col_alias);
+
+  this->_step->append_next(step);
+  step->set_prev({this->_step});
+
+  step->set_src_col({step->get_rst().get_col_idx_by_alias(src_col_alias)});
+  step->set_col_to_put({col_to_put});
+
+  step->set_label(label);
+  return ctx;
+}
+StepCtx StepCtx::update_node(label_t label, std::string src_col_alias, std::string dst_col_alias) {
+  UpdateNodeStep* step = new UpdateNodeStep;
   _builder->steps.push_back(step);
   if (_builder->first_step == nullptr) _builder->first_step = step;
   StepCtx ctx; ctx._step = step; ctx._step_id = this->_step_id++; ctx._builder = this->_builder;

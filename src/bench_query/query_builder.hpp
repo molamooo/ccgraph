@@ -1,5 +1,6 @@
 #pragma once
 #include "ldbc_c1.hpp"
+#include "ali.hpp"
 
 #include <string>
 
@@ -46,6 +47,10 @@ class QueryBuilder {
       LDBCQueryComment q; q.build(params, q_ptr);
     } else if (query_name == "ldbc_query_post") {
       LDBCQueryPost q; q.build(params, q_ptr);
+    } else if (query_name == "ali_login") {
+      AliTxn::AliLogin q; q.build(params, q_ptr);
+    } else if (query_name == "ali_query_node") {
+      AliTxn::AliQueryNode q; q.build(params, q_ptr);
     } else {
       throw FatalException(Formatter() << "No such query: " << query_name);
     }

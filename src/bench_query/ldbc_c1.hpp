@@ -1,3 +1,5 @@
+#pragma once
+
 #include "query_step.hpp"
 #include "build_seq.hpp"
 
