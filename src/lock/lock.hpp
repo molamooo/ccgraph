@@ -435,6 +435,7 @@ class AsyncQueueRWLock {
       locker_count.fetch_sub(1);
       if (reader != 0) throw FatalException("unlock writer, but reader is not 0?");
       while (true) {
+        if (_waiters.size() == 0) break;
         QueuedReq* req = &_waiters.front();
         if (req->_share == false) break;
         reader++;
