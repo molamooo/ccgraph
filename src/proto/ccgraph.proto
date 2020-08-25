@@ -1,0 +1,67 @@
+syntax = "proto3";
+package CCGraphRPC;
+
+option java_multiple_files = true;
+option java_package = "com.ccgraph.ccgraph";
+
+
+// enum PropType {
+//   // same as in result.hpp
+//   kUINT64 = 0;
+//   kUINT32 = 1;
+//   kUINT8 = 2;
+//   kDOUBLE = 3;
+//   kSTRING = 4;
+//   kINT64 = 5;
+// }
+enum Code {
+  kOk = 0;
+  kAbort = 1;
+  kFatal = 2;
+}
+// message CodeRet {
+//   Code code = 1;
+// }
+    
+message StartParam {}
+
+message CommandParam {
+  bytes command = 1;
+}
+
+message CallParam {
+  bytes txn_name = 1;
+  repeated bytes param_list = 2;
+  bool retry = 3;
+}
+
+message RetRow {
+  repeated bytes one_row = 1;
+}
+
+message Results {
+  Code code = 1;
+  repeated bytes col_name = 2;
+  repeated RetRow table = 3;
+}
+
+// message TxnID {
+//   uint64 txnid = 1;
+// }
+
+// message TxnIDParam {
+//   uint64 txnid = 1;
+//   bool reuse = 2;
+// }
+service CCGraphServer {
+  // todo: maybe we need interactive?
+  // rpc Start(StartParam) returns (TxnID) {}
+  // rpc Commit(TxnIDParam) returns (CodeRet) {} 
+  // rpc Abort(TxnIDParam) returns (CodeRet) {}
+
+  rpc Shutdown(StartParam) returns (StartParam) {}
+  
+  rpc RunTxn(CallParam) returns (Results) {}
+
+  rpc Command(CommandParam) returns (Results) {}
+}
