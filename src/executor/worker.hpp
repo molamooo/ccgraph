@@ -11,6 +11,9 @@
 #include <limits>
 #include <unordered_set>
 
+#ifndef CCGRAPH_ASYNC
+#define CCGRAPH_ASYNC 1
+#endif
 
 
 template<typename T>
@@ -1362,13 +1365,25 @@ class Worker {
       }
     }
     step->set_done();
+#if CCGRAPH_ASYNC
+    /** async */
     return f;
+#else
+    /* sequential */
+    f.wait().value();
+    return folly::makeFuture();
+#endif
   }
   VFuture ProcessStepRecursive(QueryStep* step) {
-    // fixme: remove sequential
-    // ProcessOneStep(step).wait().get();
+#if CCGRAPH_ASYNC
+    /** async */
     return ProcessOneStep(step)
       .via(folly::getGlobalCPUExecutor())
+#else
+    /* sequential */
+    ProcessOneStep(step).wait().get();
+    return folly::makeFuture()
+#endif
       .thenValue([this, step](folly::Unit){
         if (Config::get()->print_mid_rst) {
           LOG_VERBOSE("printing mid result");
@@ -1391,12 +1406,17 @@ class Worker {
     // the initial point of processing a query, no reentrant
     QueryStep* start = q->get_first_step();
     // fixme: remove sequential
-    // ProcessStepRecursive(start).wait().get();
-    // return folly::makeFuture()
-    //   .thenValue([this, q](folly::Unit){
+#if CCGRAPH_ASYNC
+    /** async */
     return folly::makeFuture().via(folly::getGlobalCPUExecutor()).thenValue([this, start](folly::Unit){
       return ProcessStepRecursive(start);
-    }).thenValue([this, q](folly::Unit){
+    })
+#else
+    /* sequential */
+    ProcessStepRecursive(start).wait().get();
+    return folly::makeFuture()
+#endif
+      .thenValue([this, q](folly::Unit){
         LOG_DEBUG("no error, trying to commit");
         if (_ccgraph->CommitCheck(q->get_cc_ctx())) {
           q->write_final_rst();
