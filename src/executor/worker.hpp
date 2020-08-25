@@ -1212,6 +1212,32 @@ class Worker {
     }
     return f;
   }
+  VFuture ProcUpsertEdge(QueryStep* _step_) {
+    auto step = dynamic_cast<UpsertEdgeStep*>(_step_);
+    auto & prev1 = step->get_prev(0)->get_rst();
+    auto & prev2 = step->get_prev(1)->get_rst();
+    bool prev1_single = (prev1.get_rows() == 1), 
+         prev2_single = (prev2.get_rows() == 1);
+    if (!prev1_single && !prev2_single) {
+      if (prev1.get_rows() !=  prev2.get_rows()) {
+        throw QueryException("Mismatch prev1 and prev2");
+      }
+    }
+    size_t n_rows = std::max(prev1.get_rows(),  prev2.get_rows());
+    auto f = folly::makeFuture();
+    for (size_t i = 0; i < n_rows; i++) {
+      labeled_id_t id1 = extract_id1(prev1, prev1_single?0:i, step->get_src_col(0));
+      labeled_id_t id2 = extract_id2(prev2, prev2_single?0:i, step->get_src_col(1));
+      f = std::move(f).thenValue([this, id1, id2, step](folly::Unit){
+        return _ccgraph->UpsertEdge(step->get_label(), id1, id2, step->get_cc_ctx());
+      }).thenValue([this, step, i](std::tuple<Edge*, bool> val){
+        Edge* e = std::get<0>(val); bool created = std::get<1>(val);
+        step->get_rst().set(i, step->get_col_to_put(0), (ResultItem)e);
+        step->get_rst().set(i, step->get_col_to_put(1), created?1:0);
+      });
+    }
+    return f;
+  }
 
   // todo: when deleting using Edge*, there should be no need to go through 
   // the index again!!!! This is like the index-free adjacency case
@@ -1317,6 +1343,10 @@ class Worker {
       case kDeleteEdge: {
         LOG_VERBOSE("Processing DeleteEdge");
         f=std::move(ProcDeleteEdge(step)); break;
+      }
+      case kUpsertEdge: {
+        LOG_VERBOSE("Processing UpsertEdge");
+        f=std::move(ProcUpsertEdge(step)); break;
       }
 
       case kGetEdgeVia: {

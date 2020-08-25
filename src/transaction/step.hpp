@@ -23,6 +23,7 @@ enum OperatorType {
   kCreateEdge,
   kUpdateEdge,
   kDeleteEdge,
+  kUpsertEdge,
 
   kGroupBy,
   kSort,

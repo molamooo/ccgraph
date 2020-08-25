@@ -554,6 +554,16 @@ class UpdateEdgeStep : public QueryStep {
   label_t get_label() const { return _label; }
   void set_label(label_t l) { _label = l; }
 };
+class UpsertEdgeStep : public QueryStep {
+ private:
+ public:
+  label_t _label;
+  inline OperatorType get_type() { return OperatorType::kUpsertEdge; };
+  inline size_t get_prev_count() { return 2; }
+  size_t get_dst_col_count() { return 2; }
+  label_t get_label() const { return _label; }
+  void set_label(label_t l) { _label = l; }
+};
 
 class DeleteEdgeStep : public QueryStep {
  private:

@@ -57,6 +57,7 @@ struct StepCtx {
   StepCtx insert_node(label_t label, std::string src_col_alias, std::string dst_col_alias);
   StepCtx update_node(label_t label, std::string src_col_alias, std::string dst_col_alias);
   StepCtx insert_edge(label_t label, StepCtx & node2, std::vector<std::string> src_cols_alias, dir_t dir, std::string dst_col_alias);
+  StepCtx upsert_edge(label_t label, StepCtx & node2, std::vector<std::string> src_cols_alias, dir_t dir, std::vector<std::string> dst_col_alias);
 
   StepCtx put_const(Result::ColumnType ty, ResultItem val, std::string col_alias = "", label_t const_label = 0);
 };
@@ -666,6 +667,32 @@ StepCtx StepCtx::insert_edge(label_t label, StepCtx & node2, std::vector<std::st
   step->set_src_col({this->_step->get_rst().get_col_idx_by_alias(src_cols_alias.at(0)),
                      node2._step->get_rst().get_col_idx_by_alias(src_cols_alias.at(1))});
   step->set_col_to_put({col_to_put});
+
+  step->set_label(label);
+  step->set_dir(dir);
+  return ctx;
+}
+
+
+StepCtx StepCtx::upsert_edge(label_t label, StepCtx & node2, std::vector<std::string> src_cols_alias, dir_t dir, std::vector<std::string> dst_cols_alias) {
+  UpsertEdgeStep* step = new UpsertEdgeStep;
+  _builder->steps.push_back(step);
+  if (_builder->first_step == nullptr) _builder->first_step = step;
+  StepCtx ctx; ctx._step = step; ctx._step_id = this->_step_id++; ctx._builder = this->_builder;
+
+
+  step->set_rst(&this->_step->get_rst());
+
+  size_t col_to_put = step->get_rst().get_cols();
+  step->get_rst().append_schema(Result::kEdge, dst_cols_alias[0]);
+  step->get_rst().append_schema(Result::kUINT64, dst_cols_alias[1]);
+
+  this->_step->append_next(step);
+  step->set_prev({this->_step, node2._step});
+
+  step->set_src_col({this->_step->get_rst().get_col_idx_by_alias(src_cols_alias.at(0)),
+                     node2._step->get_rst().get_col_idx_by_alias(src_cols_alias.at(1))});
+  step->set_col_to_put({col_to_put, col_to_put+1});
 
   step->set_label(label);
   step->set_dir(dir);

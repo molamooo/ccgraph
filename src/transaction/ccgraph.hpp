@@ -108,6 +108,12 @@ class CCGraph {
     // exclusive on edge
     return _cc_manager->UpdateEdge(label, id1, id2, ctx);
   }
+  Future<std::tuple<Edge*, bool>> UpsertEdge(
+      const label_t label, const labeled_id_t id1, const labeled_id_t id2,
+      CCContex *ctx) {
+    // exclusive on edge
+    return _cc_manager->UpsertEdge(label, id1, id2, ctx);
+  }
   Future<Edge*> DeleteEdge(
       const label_t label, const labeled_id_t id1, const labeled_id_t id2,
       CCContex *ctx) {

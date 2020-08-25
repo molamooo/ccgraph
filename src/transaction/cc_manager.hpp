@@ -409,6 +409,62 @@ class CCManager2PL : public CCManager {
       return e;
     });
   }
+  Future<std::tuple<Edge*, bool>> UpsertEdge(
+      label_t label, labeled_id_t ex_id1, labeled_id_t ex_id2,
+      CCContex* ctx) {
+    // exclusive on edge
+    // the node must be locked, otherwise it may not exist, but the edge is still successfully inserted.
+    auto f = folly::makeFuture();
+    return std::move(f).thenValue([this, ctx, ex_id1 ,ex_id2, label](folly::Unit){
+      return GrantAccessEProp(label, ex_id1, ex_id2, false, ctx);
+    }).thenValue([this, ctx, ex_id1, ex_id2, label](folly::Unit){
+      Node* n1 = _node_index->GetNodeViaLabeledId(ex_id1), *n2 = _node_index->GetNodeViaLabeledId(ex_id2);
+      if (n1 == nullptr || n2 == nullptr) throw AbortException("Insert edge, but the node does not exists");
+      Edge* e = _edge_index->GetEdge(label, n1->_internal_id, n2->_internal_id);
+      if (e != nullptr) {
+        // the update case
+        if (ctx->_org_edges.find(std::make_tuple(label, n1->_internal_id, n2->_internal_id)) != ctx->_org_edges.end()) {
+          return folly::makeFuture(std::make_tuple(e, false));
+        }
+        Edge* backup = (Edge*)_allocator->Alloc(e->_label);
+        memcpy(backup, e, _schema->get_prop_size(e->_label) + sizeof(Edge));
+        ctx->_org_edges[std::make_tuple(label, n1->_internal_id, n2->_internal_id)] = backup;
+        return folly::makeFuture(std::make_tuple(e, false));
+      } else {
+        // the insert case
+        return folly::makeFuture().thenValue([this, ctx, ex_id1](folly::Unit){
+          return GrantAccessNProp(ex_id1, true, ctx);
+        }).thenValue([this, ctx, ex_id2](folly::Unit){
+          return GrantAccessNProp(ex_id2, true, ctx);
+        }).thenValue([this, ctx, ex_id1, label](folly::Unit){
+        // exclusive on adj index
+          return GrantAccessAdjIdx(label, ex_id1, dir_out, false, ctx);
+        }).thenValue([this, ctx, ex_id2, label](folly::Unit){
+          return GrantAccessAdjIdx(label, ex_id2, dir_in, false, ctx);
+        }).thenValue([this, ctx, ex_id1, ex_id2, label](folly::Unit){
+          Node* n1 = _node_index->GetNodeViaLabeledId(ex_id1), 
+              * n2 = _node_index->GetNodeViaLabeledId(ex_id2);
+          if (n1 == nullptr || n2 == nullptr) throw AbortException("Insert edge, but the node does not exists");
+          bool created;
+          internal_id_t in_id1 = n1->_internal_id, in_id2 = n2->_internal_id;
+          Edge* e = _edge_index->TouchEdge(label, in_id1, in_id2, created);
+          if (!created) {
+            throw FatalException("impossible to reach");
+          }
+          e->_label = label;e->_internal_id1 = in_id1; e->_internal_id2 = in_id2;
+          e->_external_id1 = n1->_external_id; e->_external_id2 = n2->_external_id;
+          // todo: more elegent
+          e->_node1 = n1; e->_node2 = n2;
+          if (ctx->_org_edges.find(std::make_tuple(label, in_id1, in_id2)) != ctx->_org_edges.end()) {
+            return std::make_tuple(e, true);
+          }
+          ctx->_org_edges[std::make_tuple(label, in_id1, in_id2)] = nullptr;
+            return std::make_tuple(e, true);
+        });
+      }
+    });
+
+  }
   Future<Edge*> UpdateEdge(
       const label_t label, const labeled_id_t ex_id1, const labeled_id_t ex_id2,
       CCContex* ctx) {
