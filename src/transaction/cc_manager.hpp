@@ -79,32 +79,55 @@ class CCManager2PL : public CCManager {
 
   VFuture GrantAccess(uint64_t hashed, const bool share, CCContex* ctx) {
     // LOG_VERBOSE("locking %llu with share=%d", hashed, share);
+    auto start_time = ctx->_measure_ctx->cc_time.start();
     int state = ctx->Locked(hashed);
     if (state == 0) {
+      // new lock to be granted
+      ctx->_measure_ctx->used_locks.inc();
+
       auto f = _locks->GetLock(hashed).LockAsync(share, ctx);
       if (f.isReady()) {
         f.value();
         ctx->_lock_history[hashed] = share;
+        ctx->_measure_ctx->cc_time.stop();
         return folly::makeFuture();
       } else {
+        // todo: the measurement is cross different executor, maybe we need to do measurement in lock
         return std::move(f).via(folly::getGlobalCPUExecutor())
           .thenValue([this, hashed, share, ctx](folly::Unit){
             ctx->_lock_history[hashed] = share;
+            { // measurement
+              measure_ctx* m = ctx->_measure_ctx;
+              m->cc_time.stop();
+              m->lock_block_time.stop(m->cc_time.start_point);
+              m->blocked_locks.inc();
+            }
           });
       }
     }
     if (state == 2 || share) {
+      measure_ctx* m = ctx->_measure_ctx;
+      m->cc_time.stop();
+      m->reused_locks.inc();
       return folly::makeFuture().via(folly::getGlobalCPUExecutor());
     }
+    ctx->_measure_ctx->used_locks.inc();
     auto f = _locks->GetLock(hashed).UpgradeAsync(ctx);
     if (f.isReady()) {
       f.value();
       ctx->_lock_history[hashed] = share;
+      ctx->_measure_ctx->cc_time.stop();
       return folly::makeFuture();
     } else {
       return std::move(f).via(folly::getGlobalCPUExecutor())
         .thenValue([this, hashed, share, ctx](folly::Unit){
           ctx->_lock_history[hashed] = share;
+          {
+            measure_ctx* m = ctx->_measure_ctx;
+            m->cc_time.stop();
+            m->lock_block_time.stop(m->cc_time.start_point);
+            m->blocked_locks.inc();
+          }
         });
     }
   }
