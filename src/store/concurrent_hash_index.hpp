@@ -20,6 +20,16 @@ class ConcurrentHashIndex {
     _index[key] = val;
     _latch.Wunlock();
   }
+  void Insert(const KeyT & key, std::function<ValT()> *_allocator) {
+    _latch.Wlock();
+    auto iter = _index.find(key);
+    if (iter != _index.end()) {
+      _latch.Wunlock();
+      throw IndexException(Formatter() << "Key already exists : " << key);
+    }
+    _index[key] = (*_allocator)();
+    _latch.Wunlock();
+  }
   ValT ReadOrInsert(const KeyT & key, std::function<ValT()> *_allocator, bool & created) {
     _latch.Rlock();
     auto iter = _index.find(key);

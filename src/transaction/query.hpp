@@ -42,6 +42,22 @@ class Query {
   CCContex* _cc_ctx = nullptr;
 
  public:
+  ~Query(){
+    _first_step = nullptr;
+    for (QueryStep* step : _steps) {
+      delete step;
+    }
+    _steps.clear();
+
+    for (Result* rst : _rst_list) {
+      delete rst;
+    }
+    _rst_list.clear();
+    if (_cc_ctx) {
+      delete _cc_ctx;
+      _cc_ctx = nullptr;
+    }
+  }
   RetCode _rc;
   std::string _abort_msg;
   QueryStep* get_first_step() { return _first_step; }

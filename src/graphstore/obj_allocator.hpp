@@ -16,6 +16,7 @@ class FixSizeAllocator {
   std::atomic_flag _f = ATOMIC_FLAG_INIT;
  public:
   FixSizeAllocator(const uint64_t size) : _pool(size) {}
+  ~FixSizeAllocator() { _pool.purge_memory(); }
   void * Alloc() {
     while (_f.test_and_set());
     void * p = _pool.malloc();

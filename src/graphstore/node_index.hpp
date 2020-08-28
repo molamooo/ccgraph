@@ -31,6 +31,13 @@ class NodeIndex  {
     // _allocator = al;
     // _next_id_to_use.store(1);
   }
+  ~NodeIndex() {
+    // just let the allocator to be freed.
+    // std::function<void(Node*)> lambda = [this](Node* n){
+    //   _allocator->Free(n->_type, n);
+    // };
+    // _no_label_id_index.ProcessAll(lambda);
+  }
   Node* GetNodeViaLabeledId(const label_t label, const labeled_id_t id) {
     try {
       return _labeled_id_index.at(label).Read(id);
@@ -47,6 +54,14 @@ class NodeIndex  {
     } catch (IndexException & e) {
       return nullptr;
     }
+  }
+  Node* RestoreNode(Node* backup, bool & created) {
+    std::function<Node*()> lambda = [backup](){return backup;};
+    Node* n = _labeled_id_index.at(backup->_type).ReadOrInsert(backup->_external_id, &lambda, created);
+    if (created == false) return n;
+    assert(n == backup);
+    _no_label_id_index.Insert(backup->_internal_id, n);
+    return n;
   }
   Node* TouchNode(const label_t label, const labeled_id_t id, bool & created) {
     auto lambda = _allocator->get_allocator<Node>(label);
@@ -65,17 +80,27 @@ class NodeIndex  {
   Node* InsertNode(const label_t label, const labeled_id_t id) {
     // throw index exception if node exists
     Node* n = (Node*)_allocator->Alloc(label);
-    _labeled_id_index.at(label).Insert(id, n);
+    try {
+      _labeled_id_index.at(label).Insert(id, n);
+    } catch (IndexException& e) {
+      _allocator->Free(label, n);
+      throw e;
+    }
     internal_id_t in_id(_next_id_to_use.fetch_add(1));
     n->_internal_id = in_id;
     n->_external_id = id;
     n->_type = label;
-    _no_label_id_index.Insert(in_id, n);
+    try {
+      _no_label_id_index.Insert(in_id, n);
+    } catch (IndexException & e) {
+      throw FatalException("Unexpected reuse of internal id");
+    }
     return n;
   }
   Node* InsertNode(const labeled_id_t id) {
     return InsertNode(id.label, id);
   }
+  /** deletion, let outside handle the recycle of node pointer */
   Node* DeleteNodeViaInternalId(const internal_id_t id) {
     try {
       Node* n = _no_label_id_index.Delete(id);

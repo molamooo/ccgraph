@@ -33,12 +33,26 @@ class EdgeIndex {
     _edge_allocator(allocator),
     _adj_list_allocator(sizeof(ConcurrentHashIndex<internal_id_t, Edge*>)),
     _label(label) {}
+  ~EdgeIndex() {
+    // seems we do not need to free explicitly, since allocator will free all when deconstructing
+    std::function<void(CHIdx<internal_id_t, Edge*>*)> lambda = [this](CHIdx<internal_id_t, Edge*>* idx){ idx->~ConcurrentHashIndex();};
+    _id_index_in.ProcessAll(lambda);
+    _id_index_out.ProcessAll(lambda);
+  }
   Edge* GetEdge(const internal_id_t id1, const internal_id_t id2) {
     try {
       return _id_index_out.Read(id1)->Read(id2);
     } catch (IndexException & e) {
       return nullptr;
     }
+  }
+  Edge* RestoreEdge(Edge* backup, bool & created) {
+    std::function<Edge*()> lambda = [backup](){return backup;};
+    Edge* e = _id_index_out.Read(backup->_internal_id1)->ReadOrInsert(backup->_internal_id2, &lambda, created);
+    if (! created) return e;
+    assert(e == backup);
+    _id_index_in.Read(backup->_internal_id2)->Insert(backup->_internal_id1, backup);
+    return backup;
   }
   /**
    * @brief the outside must take care of the node field in edge.
@@ -144,16 +158,18 @@ class EdgeIndex {
       } catch (IndexException & e) {}
     }
   }
-  void DeleteAllEdge(const internal_id_t id) {
+  void DeleteAllEdge(const internal_id_t id, bool recycle) {
     std::vector<Edge*> outs;
     _id_index_out.Read(id)->ReadAll(outs);
     for (Edge* e : outs) {
       DeleteEdge(e->_internal_id1, e->_internal_id2);
+      if (recycle) _edge_allocator->Free(e->_label, e);
     }
     std::vector<Edge*> ins;
-    _id_index_out.Read(id)->ReadAll(ins);
+    _id_index_in.Read(id)->ReadAll(ins);
     for (Edge* e : ins) {
       DeleteEdge(e->_internal_id2, e->_internal_id1);
+      if (recycle) _edge_allocator->Free(e->_label, e);
     }
   }
 };
@@ -178,6 +194,9 @@ class LabelEdgeIndex  {
     } catch (std::out_of_range & e) {
       throw IndexException(Formatter() << "Edge label should be already in the index: " << label);
     }
+  }
+  Edge* RestoreEdge(Edge* backup, bool & created) {
+    return _index.at(backup->_label).RestoreEdge(backup, created);
   }
   Edge* TouchEdge(const label_t label, const internal_id_t id1, const internal_id_t id2, bool & created) {
     try {
@@ -212,9 +231,9 @@ class LabelEdgeIndex  {
       throw IndexException(Formatter() << "Edge label should be already in the index: " << label);
     }
   }
-  void DeleteAllEdge(const label_t label, const internal_id_t id) {
+  void DeleteAllEdge(const label_t label, const internal_id_t id, bool recycle) {
     try {
-      _index.at(label).DeleteAllEdge(id);
+      _index.at(label).DeleteAllEdge(id, recycle);
     } catch (std::out_of_range & e) {
       throw IndexException(Formatter() << "Edge label should be already in the index: " << label);
     }

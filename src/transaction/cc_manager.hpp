@@ -295,28 +295,32 @@ class CCManager2PL : public CCManager {
       Node* n = _node_index->DeleteNode(label, ex_id);
       if (n == nullptr) throw AbortException("Node not exist");
       if (ctx->_org_nodes.find(n->_internal_id) == ctx->_org_nodes.end()) {
-        Node* backup = (Node*)_allocator->Alloc(n->_type);
-        memcpy(backup, n, _schema->get_prop_size(n->_type) + sizeof(Node));
-        ctx->_org_nodes[n->_internal_id] = backup;
+        // fix: directly place the deleted node to backup
+        // Node* backup = (Node*)_allocator->Alloc(n->_type);
+        // memcpy(backup, n, _schema->get_prop_size(n->_type) + sizeof(Node));
+        ctx->_org_nodes[n->_internal_id] = n;
       }
       for (label_t l = _schema->get_min_edge_label(); l <= _schema->get_max_label(); l++) {
         for (Edge* e : outs->at(l)) {
           if (ctx->_org_edges.find(std::make_tuple(l, e->_internal_id1, e->_internal_id2)) == ctx->_org_edges.end()) {
-            Edge* backup = (Edge*)_allocator->Alloc(e->_label);
-            memcpy(backup, e, _schema->get_prop_size(e->_label) + sizeof(Edge));
-            ctx->_org_edges[std::make_tuple(l, e->_internal_id1, e->_internal_id2)] = backup;
+            // fix: directly place the deleted edge to backup
+            // Edge* backup = (Edge*)_allocator->Alloc(e->_label);
+            // memcpy(backup, e, _schema->get_prop_size(e->_label) + sizeof(Edge));
+            ctx->_org_edges[std::make_tuple(l, e->_internal_id1, e->_internal_id2)] = e;
           }
         }
         for (Edge* e : ins->at(l)) {
           if (ctx->_org_edges.find(std::make_tuple(l, e->_internal_id1, e->_internal_id2)) == ctx->_org_edges.end()) {
-            Edge* backup = (Edge*)_allocator->Alloc(e->_label);
-            memcpy(backup, e, _schema->get_prop_size(e->_label) + sizeof(Edge));
-            ctx->_org_edges[std::make_tuple(l, e->_internal_id1, e->_internal_id2)] = backup;
+            // fix: directly place the deleted edge to backup
+            // Edge* backup = (Edge*)_allocator->Alloc(e->_label);
+            // memcpy(backup, e, _schema->get_prop_size(e->_label) + sizeof(Edge));
+            ctx->_org_edges[std::make_tuple(l, e->_internal_id1, e->_internal_id2)] = e;
           }
         }
         outs->at(l).clear(); outs->at(l).shrink_to_fit();
         ins->at(l).clear(); ins->at(l).shrink_to_fit();
-        _edge_index->DeleteAllEdge(l, n->_internal_id);
+        // do not recycle these edge, since we are directly storing them as backup
+        _edge_index->DeleteAllEdge(l, n->_internal_id, false);
       }
     });
     
@@ -525,9 +529,10 @@ class CCManager2PL : public CCManager {
         if (ctx->_org_edges.find(std::make_tuple(label, n1->_internal_id, n2->_internal_id)) != ctx->_org_edges.end()) {
           return nullptr;
         }
-        Edge* backup = (Edge*)_allocator->Alloc(e->_label);
-        memcpy(backup, e, _schema->get_prop_size(e->_label) + sizeof(Edge));
-        ctx->_org_edges[std::make_tuple(label, n1->_internal_id, n2->_internal_id)] = backup;
+        // fix: directly place the deleted edge to backup
+        // Edge* backup = (Edge*)_allocator->Alloc(e->_label);
+        // memcpy(backup, e, _schema->get_prop_size(e->_label) + sizeof(Edge));
+        ctx->_org_edges[std::make_tuple(label, n1->_internal_id, n2->_internal_id)] = e;
         return nullptr;
       });
   }
@@ -609,10 +614,13 @@ class CCManager2PL : public CCManager {
       } else {
         Node* backup = iter.second;
         bool c;
-        Node* n = _node_index->TouchNode(backup->_type, backup->_external_id, c);
-        memcpy(n, backup, _schema->get_prop_size(n->_type) + sizeof(Node));
+        // fix: the backup should be placed back, since edge is pointing to it.
+        Node* n = _node_index->RestoreNode(backup, c);
+        if (c ==false) { // not using the backup, thus this is the update case
+          memcpy(n, backup, _schema->get_prop_size(n->_type) + sizeof(Node));
+          _allocator->Free(iter.second->_type, iter.second);
+        }
       }
-      _allocator->Free(iter.second->_type, iter.second);
     }
     for (auto & iter : ctx->_org_edges) {
       if (iter.second == nullptr) {
@@ -622,10 +630,12 @@ class CCManager2PL : public CCManager {
       } else {
         Edge* backup = iter.second;
         bool c;
-        Edge* e = _edge_index->TouchEdge(std::get<0>(iter.first), std::get<1>(iter.first), std::get<2>(iter.first), c);
-        memcpy(e, backup, _schema->get_prop_size(e->_label) + sizeof(Edge));
+        Edge* e = _edge_index->RestoreEdge(backup, c);
+        if (!c) {
+          memcpy(e, backup, _schema->get_prop_size(e->_label) + sizeof(Edge));
+          _allocator->Free(backup->_label, backup);
+        }
       }
-      _allocator->Free(iter.second->_label, iter.second);
     }
     for (auto iter : ctx->_lock_history) {
       _locks->GetLock(iter.first).Unlock(iter.second, ctx);

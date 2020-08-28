@@ -50,16 +50,16 @@ int main (int argc, char** argv) {
   //   return folly::makeFuture((int)4);
   // });
   // p.setValue(1);
-  folly::Promise<int> p;
-  folly::Future<int> f = p.getFuture().thenValue([](int)->int{
-    throw Unimplemented("Test");
-  }).thenValue([](int){
-    std::cout << "This should not be shown\n";
-    return folly::makeFuture((int)3);
-  });
-  std::cout << "the exception future is ready?" << f.isReady() << std::endl;
-  p.setValue(1);
-  std::cout << "the exception future is ready?" << f.isReady() << std::endl;
+  // folly::Promise<int> p;
+  // folly::Future<int> f = p.getFuture().thenValue([](int)->int{
+  //   throw Unimplemented("Test");
+  // }).thenValue([](int){
+  //   std::cout << "This should not be shown\n";
+  //   return folly::makeFuture((int)3);
+  // });
+  // std::cout << "the exception future is ready?" << f.isReady() << std::endl;
+  // p.setValue(1);
+  // std::cout << "the exception future is ready?" << f.isReady() << std::endl;
 
 
   
@@ -74,7 +74,7 @@ int main (int argc, char** argv) {
   config.count_lock_node_index = 0;
   config.count_lock_node_property = 1000;
   config.schema_file = "/home/sxn/ccgraph/graph_desc/schema_test";
-  config.thread_cnt = 1;
+  config.thread_cnt = 40;
 
   ccfcore->init();
   LOG_INFO("CCFrameworkCore init done");
@@ -89,10 +89,11 @@ int main (int argc, char** argv) {
     std::cerr << "> ";
     if (!std::cin.getline(buf, 2000)) {
       LOG_ERROR("error when reading line");
+      delete ccfcore;
       return 0;
     }
     if (buf[0] == '\0') continue;
-    if (strcmp(buf, "exit") == 0 || strcmp(buf, "quit") == 0) {return 0;}
+    if (strcmp(buf, "exit") == 0 || strcmp(buf, "quit") == 0) { delete ccfcore;return 0;}
     if (strncmp(buf, "set_rst_max_row", strlen("set_rst_max_row")) == 0) {
       char* next_space = std::strchr(buf, ' ');
       if (next_space == nullptr) {
