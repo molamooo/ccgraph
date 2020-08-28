@@ -83,8 +83,9 @@ namespace CCGraphRPC {
 
 enum Code : int {
   kOk = 0,
-  kAbort = 1,
-  kFatal = 2,
+  kConflict = 1,
+  kAbort = 2,
+  kFatal = 3,
   Code_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<::PROTOBUF_NAMESPACE_ID::int32>::min(),
   Code_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<::PROTOBUF_NAMESPACE_ID::int32>::max()
 };
@@ -843,6 +844,7 @@ class Results PROTOBUF_FINAL :
   enum : int {
     kColNameFieldNumber = 2,
     kTableFieldNumber = 3,
+    kMeasureFieldNumber = 4,
     kCodeFieldNumber = 1,
   };
   // repeated bytes col_name = 2;
@@ -887,6 +889,28 @@ class Results PROTOBUF_FINAL :
   const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::CCGraphRPC::RetRow >&
       table() const;
 
+  // repeated uint64 measure = 4;
+  int measure_size() const;
+  private:
+  int _internal_measure_size() const;
+  public:
+  void clear_measure();
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint64 _internal_measure(int index) const;
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedField< ::PROTOBUF_NAMESPACE_ID::uint64 >&
+      _internal_measure() const;
+  void _internal_add_measure(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  ::PROTOBUF_NAMESPACE_ID::RepeatedField< ::PROTOBUF_NAMESPACE_ID::uint64 >*
+      _internal_mutable_measure();
+  public:
+  ::PROTOBUF_NAMESPACE_ID::uint64 measure(int index) const;
+  void set_measure(int index, ::PROTOBUF_NAMESPACE_ID::uint64 value);
+  void add_measure(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedField< ::PROTOBUF_NAMESPACE_ID::uint64 >&
+      measure() const;
+  ::PROTOBUF_NAMESPACE_ID::RepeatedField< ::PROTOBUF_NAMESPACE_ID::uint64 >*
+      mutable_measure();
+
   // .CCGraphRPC.Code code = 1;
   void clear_code();
   ::CCGraphRPC::Code code() const;
@@ -905,6 +929,8 @@ class Results PROTOBUF_FINAL :
   typedef void DestructorSkippable_;
   ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<std::string> col_name_;
   ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::CCGraphRPC::RetRow > table_;
+  ::PROTOBUF_NAMESPACE_ID::RepeatedField< ::PROTOBUF_NAMESPACE_ID::uint64 > measure_;
+  mutable std::atomic<int> _measure_cached_byte_size_;
   int code_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_ccgraph_2eproto;
@@ -1397,6 +1423,53 @@ inline const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::CCGraphRPC::RetRow >&
 Results::table() const {
   // @@protoc_insertion_point(field_list:CCGraphRPC.Results.table)
   return table_;
+}
+
+// repeated uint64 measure = 4;
+inline int Results::_internal_measure_size() const {
+  return measure_.size();
+}
+inline int Results::measure_size() const {
+  return _internal_measure_size();
+}
+inline void Results::clear_measure() {
+  measure_.Clear();
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 Results::_internal_measure(int index) const {
+  return measure_.Get(index);
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 Results::measure(int index) const {
+  // @@protoc_insertion_point(field_get:CCGraphRPC.Results.measure)
+  return _internal_measure(index);
+}
+inline void Results::set_measure(int index, ::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  measure_.Set(index, value);
+  // @@protoc_insertion_point(field_set:CCGraphRPC.Results.measure)
+}
+inline void Results::_internal_add_measure(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  measure_.Add(value);
+}
+inline void Results::add_measure(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  _internal_add_measure(value);
+  // @@protoc_insertion_point(field_add:CCGraphRPC.Results.measure)
+}
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedField< ::PROTOBUF_NAMESPACE_ID::uint64 >&
+Results::_internal_measure() const {
+  return measure_;
+}
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedField< ::PROTOBUF_NAMESPACE_ID::uint64 >&
+Results::measure() const {
+  // @@protoc_insertion_point(field_list:CCGraphRPC.Results.measure)
+  return _internal_measure();
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedField< ::PROTOBUF_NAMESPACE_ID::uint64 >*
+Results::_internal_mutable_measure() {
+  return &measure_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedField< ::PROTOBUF_NAMESPACE_ID::uint64 >*
+Results::mutable_measure() {
+  // @@protoc_insertion_point(field_mutable_list:CCGraphRPC.Results.measure)
+  return _internal_mutable_measure();
 }
 
 #ifdef __GNUC__

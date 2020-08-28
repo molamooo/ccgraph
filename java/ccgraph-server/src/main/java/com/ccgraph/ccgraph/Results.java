@@ -19,6 +19,7 @@ private static final long serialVersionUID = 0L;
     code_ = 0;
     colName_ = java.util.Collections.emptyList();
     table_ = java.util.Collections.emptyList();
+    measure_ = emptyLongList();
   }
 
   @java.lang.Override
@@ -75,6 +76,27 @@ private static final long serialVersionUID = 0L;
                 input.readMessage(com.ccgraph.ccgraph.RetRow.parser(), extensionRegistry));
             break;
           }
+          case 32: {
+            if (!((mutable_bitField0_ & 0x00000004) != 0)) {
+              measure_ = newLongList();
+              mutable_bitField0_ |= 0x00000004;
+            }
+            measure_.addLong(input.readUInt64());
+            break;
+          }
+          case 34: {
+            int length = input.readRawVarint32();
+            int limit = input.pushLimit(length);
+            if (!((mutable_bitField0_ & 0x00000004) != 0) && input.getBytesUntilLimit() > 0) {
+              measure_ = newLongList();
+              mutable_bitField0_ |= 0x00000004;
+            }
+            while (input.getBytesUntilLimit() > 0) {
+              measure_.addLong(input.readUInt64());
+            }
+            input.popLimit(limit);
+            break;
+          }
           default: {
             if (!parseUnknownField(
                 input, unknownFields, extensionRegistry, tag)) {
@@ -95,6 +117,9 @@ private static final long serialVersionUID = 0L;
       }
       if (((mutable_bitField0_ & 0x00000002) != 0)) {
         table_ = java.util.Collections.unmodifiableList(table_);
+      }
+      if (((mutable_bitField0_ & 0x00000004) != 0)) {
+        measure_.makeImmutable(); // C
       }
       this.unknownFields = unknownFields.build();
       makeExtensionsImmutable();
@@ -199,6 +224,34 @@ private static final long serialVersionUID = 0L;
     return table_.get(index);
   }
 
+  public static final int MEASURE_FIELD_NUMBER = 4;
+  private com.google.protobuf.Internal.LongList measure_;
+  /**
+   * <code>repeated uint64 measure = 4;</code>
+   * @return A list containing the measure.
+   */
+  @java.lang.Override
+  public java.util.List<java.lang.Long>
+      getMeasureList() {
+    return measure_;
+  }
+  /**
+   * <code>repeated uint64 measure = 4;</code>
+   * @return The count of measure.
+   */
+  public int getMeasureCount() {
+    return measure_.size();
+  }
+  /**
+   * <code>repeated uint64 measure = 4;</code>
+   * @param index The index of the element to return.
+   * @return The measure at the given index.
+   */
+  public long getMeasure(int index) {
+    return measure_.getLong(index);
+  }
+  private int measureMemoizedSerializedSize = -1;
+
   private byte memoizedIsInitialized = -1;
   @java.lang.Override
   public final boolean isInitialized() {
@@ -213,6 +266,7 @@ private static final long serialVersionUID = 0L;
   @java.lang.Override
   public void writeTo(com.google.protobuf.CodedOutputStream output)
                       throws java.io.IOException {
+    getSerializedSize();
     if (code_ != com.ccgraph.ccgraph.Code.kOk.getNumber()) {
       output.writeEnum(1, code_);
     }
@@ -221,6 +275,13 @@ private static final long serialVersionUID = 0L;
     }
     for (int i = 0; i < table_.size(); i++) {
       output.writeMessage(3, table_.get(i));
+    }
+    if (getMeasureList().size() > 0) {
+      output.writeUInt32NoTag(34);
+      output.writeUInt32NoTag(measureMemoizedSerializedSize);
+    }
+    for (int i = 0; i < measure_.size(); i++) {
+      output.writeUInt64NoTag(measure_.getLong(i));
     }
     unknownFields.writeTo(output);
   }
@@ -248,6 +309,20 @@ private static final long serialVersionUID = 0L;
       size += com.google.protobuf.CodedOutputStream
         .computeMessageSize(3, table_.get(i));
     }
+    {
+      int dataSize = 0;
+      for (int i = 0; i < measure_.size(); i++) {
+        dataSize += com.google.protobuf.CodedOutputStream
+          .computeUInt64SizeNoTag(measure_.getLong(i));
+      }
+      size += dataSize;
+      if (!getMeasureList().isEmpty()) {
+        size += 1;
+        size += com.google.protobuf.CodedOutputStream
+            .computeInt32SizeNoTag(dataSize);
+      }
+      measureMemoizedSerializedSize = dataSize;
+    }
     size += unknownFields.getSerializedSize();
     memoizedSize = size;
     return size;
@@ -268,6 +343,8 @@ private static final long serialVersionUID = 0L;
         .equals(other.getColNameList())) return false;
     if (!getTableList()
         .equals(other.getTableList())) return false;
+    if (!getMeasureList()
+        .equals(other.getMeasureList())) return false;
     if (!unknownFields.equals(other.unknownFields)) return false;
     return true;
   }
@@ -288,6 +365,10 @@ private static final long serialVersionUID = 0L;
     if (getTableCount() > 0) {
       hash = (37 * hash) + TABLE_FIELD_NUMBER;
       hash = (53 * hash) + getTableList().hashCode();
+    }
+    if (getMeasureCount() > 0) {
+      hash = (37 * hash) + MEASURE_FIELD_NUMBER;
+      hash = (53 * hash) + getMeasureList().hashCode();
     }
     hash = (29 * hash) + unknownFields.hashCode();
     memoizedHashCode = hash;
@@ -433,6 +514,8 @@ private static final long serialVersionUID = 0L;
       } else {
         tableBuilder_.clear();
       }
+      measure_ = emptyLongList();
+      bitField0_ = (bitField0_ & ~0x00000004);
       return this;
     }
 
@@ -475,6 +558,11 @@ private static final long serialVersionUID = 0L;
       } else {
         result.table_ = tableBuilder_.build();
       }
+      if (((bitField0_ & 0x00000004) != 0)) {
+        measure_.makeImmutable();
+        bitField0_ = (bitField0_ & ~0x00000004);
+      }
+      result.measure_ = measure_;
       onBuilt();
       return result;
     }
@@ -561,6 +649,16 @@ private static final long serialVersionUID = 0L;
             tableBuilder_.addAllMessages(other.table_);
           }
         }
+      }
+      if (!other.measure_.isEmpty()) {
+        if (measure_.isEmpty()) {
+          measure_ = other.measure_;
+          bitField0_ = (bitField0_ & ~0x00000004);
+        } else {
+          ensureMeasureIsMutable();
+          measure_.addAll(other.measure_);
+        }
+        onChanged();
       }
       this.mergeUnknownFields(other.unknownFields);
       onChanged();
@@ -969,6 +1067,85 @@ private static final long serialVersionUID = 0L;
         table_ = null;
       }
       return tableBuilder_;
+    }
+
+    private com.google.protobuf.Internal.LongList measure_ = emptyLongList();
+    private void ensureMeasureIsMutable() {
+      if (!((bitField0_ & 0x00000004) != 0)) {
+        measure_ = mutableCopy(measure_);
+        bitField0_ |= 0x00000004;
+       }
+    }
+    /**
+     * <code>repeated uint64 measure = 4;</code>
+     * @return A list containing the measure.
+     */
+    public java.util.List<java.lang.Long>
+        getMeasureList() {
+      return ((bitField0_ & 0x00000004) != 0) ?
+               java.util.Collections.unmodifiableList(measure_) : measure_;
+    }
+    /**
+     * <code>repeated uint64 measure = 4;</code>
+     * @return The count of measure.
+     */
+    public int getMeasureCount() {
+      return measure_.size();
+    }
+    /**
+     * <code>repeated uint64 measure = 4;</code>
+     * @param index The index of the element to return.
+     * @return The measure at the given index.
+     */
+    public long getMeasure(int index) {
+      return measure_.getLong(index);
+    }
+    /**
+     * <code>repeated uint64 measure = 4;</code>
+     * @param index The index to set the value at.
+     * @param value The measure to set.
+     * @return This builder for chaining.
+     */
+    public Builder setMeasure(
+        int index, long value) {
+      ensureMeasureIsMutable();
+      measure_.setLong(index, value);
+      onChanged();
+      return this;
+    }
+    /**
+     * <code>repeated uint64 measure = 4;</code>
+     * @param value The measure to add.
+     * @return This builder for chaining.
+     */
+    public Builder addMeasure(long value) {
+      ensureMeasureIsMutable();
+      measure_.addLong(value);
+      onChanged();
+      return this;
+    }
+    /**
+     * <code>repeated uint64 measure = 4;</code>
+     * @param values The measure to add.
+     * @return This builder for chaining.
+     */
+    public Builder addAllMeasure(
+        java.lang.Iterable<? extends java.lang.Long> values) {
+      ensureMeasureIsMutable();
+      com.google.protobuf.AbstractMessageLite.Builder.addAll(
+          values, measure_);
+      onChanged();
+      return this;
+    }
+    /**
+     * <code>repeated uint64 measure = 4;</code>
+     * @return This builder for chaining.
+     */
+    public Builder clearMeasure() {
+      measure_ = emptyLongList();
+      bitField0_ = (bitField0_ & ~0x00000004);
+      onChanged();
+      return this;
     }
     @java.lang.Override
     public final Builder setUnknownFields(

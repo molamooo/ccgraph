@@ -58,4 +58,21 @@ public interface ResultsOrBuilder extends
    */
   com.ccgraph.ccgraph.RetRowOrBuilder getTableOrBuilder(
       int index);
+
+  /**
+   * <code>repeated uint64 measure = 4;</code>
+   * @return A list containing the measure.
+   */
+  java.util.List<java.lang.Long> getMeasureList();
+  /**
+   * <code>repeated uint64 measure = 4;</code>
+   * @return The count of measure.
+   */
+  int getMeasureCount();
+  /**
+   * <code>repeated uint64 measure = 4;</code>
+   * @param index The index of the element to return.
+   * @return The measure at the given index.
+   */
+  long getMeasure(int index);
 }

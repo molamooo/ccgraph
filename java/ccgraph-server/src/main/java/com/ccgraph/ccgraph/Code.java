@@ -25,13 +25,17 @@ public enum Code
    */
   kOk(0),
   /**
-   * <code>kAbort = 1;</code>
+   * <code>kConflict = 1;</code>
    */
-  kAbort(1),
+  kConflict(1),
   /**
-   * <code>kFatal = 2;</code>
+   * <code>kAbort = 2;</code>
    */
-  kFatal(2),
+  kAbort(2),
+  /**
+   * <code>kFatal = 3;</code>
+   */
+  kFatal(3),
   UNRECOGNIZED(-1),
   ;
 
@@ -40,13 +44,17 @@ public enum Code
    */
   public static final int kOk_VALUE = 0;
   /**
-   * <code>kAbort = 1;</code>
+   * <code>kConflict = 1;</code>
    */
-  public static final int kAbort_VALUE = 1;
+  public static final int kConflict_VALUE = 1;
   /**
-   * <code>kFatal = 2;</code>
+   * <code>kAbort = 2;</code>
    */
-  public static final int kFatal_VALUE = 2;
+  public static final int kAbort_VALUE = 2;
+  /**
+   * <code>kFatal = 3;</code>
+   */
+  public static final int kFatal_VALUE = 3;
 
 
   public final int getNumber() {
@@ -74,8 +82,9 @@ public enum Code
   public static Code forNumber(int value) {
     switch (value) {
       case 0: return kOk;
-      case 1: return kAbort;
-      case 2: return kFatal;
+      case 1: return kConflict;
+      case 2: return kAbort;
+      case 3: return kFatal;
       default: return null;
     }
   }

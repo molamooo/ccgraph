@@ -146,6 +146,7 @@ const ::PROTOBUF_NAMESPACE_ID::uint32 TableStruct_ccgraph_2eproto::offsets[] PRO
   PROTOBUF_FIELD_OFFSET(::CCGraphRPC::Results, code_),
   PROTOBUF_FIELD_OFFSET(::CCGraphRPC::Results, col_name_),
   PROTOBUF_FIELD_OFFSET(::CCGraphRPC::Results, table_),
+  PROTOBUF_FIELD_OFFSET(::CCGraphRPC::Results, measure_),
 };
 static const ::PROTOBUF_NAMESPACE_ID::internal::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) = {
   { 0, -1, sizeof(::CCGraphRPC::StartParam)},
@@ -168,16 +169,17 @@ const char descriptor_table_protodef_ccgraph_2eproto[] PROTOBUF_SECTION_VARIABLE
   "m\"\037\n\014CommandParam\022\017\n\007command\030\001 \001(\014\"@\n\tCa"
   "llParam\022\020\n\010txn_name\030\001 \001(\014\022\022\n\nparam_list\030"
   "\002 \003(\014\022\r\n\005retry\030\003 \001(\010\"\031\n\006RetRow\022\017\n\007one_ro"
-  "w\030\001 \003(\014\"^\n\007Results\022\036\n\004code\030\001 \001(\0162\020.CCGra"
+  "w\030\001 \003(\014\"o\n\007Results\022\036\n\004code\030\001 \001(\0162\020.CCGra"
   "phRPC.Code\022\020\n\010col_name\030\002 \003(\014\022!\n\005table\030\003 "
-  "\003(\0132\022.CCGraphRPC.RetRow*\'\n\004Code\022\007\n\003kOk\020\000"
-  "\022\n\n\006kAbort\020\001\022\n\n\006kFatal\020\0022\301\001\n\rCCGraphServ"
-  "er\022<\n\010Shutdown\022\026.CCGraphRPC.StartParam\032\026"
-  ".CCGraphRPC.StartParam\"\000\0226\n\006RunTxn\022\025.CCG"
-  "raphRPC.CallParam\032\023.CCGraphRPC.Results\"\000"
-  "\022:\n\007Command\022\030.CCGraphRPC.CommandParam\032\023."
-  "CCGraphRPC.Results\"\000B\027\n\023com.ccgraph.ccgr"
-  "aphP\001b\006proto3"
+  "\003(\0132\022.CCGraphRPC.RetRow\022\017\n\007measure\030\004 \003(\004"
+  "*6\n\004Code\022\007\n\003kOk\020\000\022\r\n\tkConflict\020\001\022\n\n\006kAbo"
+  "rt\020\002\022\n\n\006kFatal\020\0032\301\001\n\rCCGraphServer\022<\n\010Sh"
+  "utdown\022\026.CCGraphRPC.StartParam\032\026.CCGraph"
+  "RPC.StartParam\"\000\0226\n\006RunTxn\022\025.CCGraphRPC."
+  "CallParam\032\023.CCGraphRPC.Results\"\000\022:\n\007Comm"
+  "and\022\030.CCGraphRPC.CommandParam\032\023.CCGraphR"
+  "PC.Results\"\000B\027\n\023com.ccgraph.ccgraphP\001b\006p"
+  "roto3"
   ;
 static const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable*const descriptor_table_ccgraph_2eproto_deps[1] = {
 };
@@ -190,7 +192,7 @@ static ::PROTOBUF_NAMESPACE_ID::internal::SCCInfoBase*const descriptor_table_ccg
 };
 static ::PROTOBUF_NAMESPACE_ID::internal::once_flag descriptor_table_ccgraph_2eproto_once;
 const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable descriptor_table_ccgraph_2eproto = {
-  false, false, descriptor_table_protodef_ccgraph_2eproto, "ccgraph.proto", 533,
+  false, false, descriptor_table_protodef_ccgraph_2eproto, "ccgraph.proto", 565,
   &descriptor_table_ccgraph_2eproto_once, descriptor_table_ccgraph_2eproto_sccs, descriptor_table_ccgraph_2eproto_deps, 5, 0,
   schemas, file_default_instances, TableStruct_ccgraph_2eproto::offsets,
   file_level_metadata_ccgraph_2eproto, 5, file_level_enum_descriptors_ccgraph_2eproto, file_level_service_descriptors_ccgraph_2eproto,
@@ -208,6 +210,7 @@ bool Code_IsValid(int value) {
     case 0:
     case 1:
     case 2:
+    case 3:
       return true;
     default:
       return false;
@@ -1059,7 +1062,8 @@ class Results::_Internal {
 Results::Results(::PROTOBUF_NAMESPACE_ID::Arena* arena)
   : ::PROTOBUF_NAMESPACE_ID::Message(arena),
   col_name_(arena),
-  table_(arena) {
+  table_(arena),
+  measure_(arena) {
   SharedCtor();
   RegisterArenaDtor(arena);
   // @@protoc_insertion_point(arena_constructor:CCGraphRPC.Results)
@@ -1067,7 +1071,8 @@ Results::Results(::PROTOBUF_NAMESPACE_ID::Arena* arena)
 Results::Results(const Results& from)
   : ::PROTOBUF_NAMESPACE_ID::Message(),
       col_name_(from.col_name_),
-      table_(from.table_) {
+      table_(from.table_),
+      measure_(from.measure_) {
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
   code_ = from.code_;
   // @@protoc_insertion_point(copy_constructor:CCGraphRPC.Results)
@@ -1111,6 +1116,7 @@ void Results::Clear() {
 
   col_name_.Clear();
   table_.Clear();
+  measure_.Clear();
   code_ = 0;
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
@@ -1154,6 +1160,16 @@ const char* Results::_InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::in
             CHK_(ptr);
             if (!ctx->DataAvailable(ptr)) break;
           } while (::PROTOBUF_NAMESPACE_ID::internal::ExpectTag<26>(ptr));
+        } else goto handle_unusual;
+        continue;
+      // repeated uint64 measure = 4;
+      case 4:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 34)) {
+          ptr = ::PROTOBUF_NAMESPACE_ID::internal::PackedUInt64Parser(_internal_mutable_measure(), ptr, ctx);
+          CHK_(ptr);
+        } else if (static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 32) {
+          _internal_add_measure(::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr));
+          CHK_(ptr);
         } else goto handle_unusual;
         continue;
       default: {
@@ -1205,6 +1221,15 @@ failure:
       InternalWriteMessage(3, this->_internal_table(i), target, stream);
   }
 
+  // repeated uint64 measure = 4;
+  {
+    int byte_size = _measure_cached_byte_size_.load(std::memory_order_relaxed);
+    if (byte_size > 0) {
+      target = stream->WriteUInt64Packed(
+          4, _internal_measure(), byte_size, target);
+    }
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -1234,6 +1259,21 @@ size_t Results::ByteSizeLong() const {
   for (const auto& msg : this->table_) {
     total_size +=
       ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::MessageSize(msg);
+  }
+
+  // repeated uint64 measure = 4;
+  {
+    size_t data_size = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::
+      UInt64Size(this->measure_);
+    if (data_size > 0) {
+      total_size += 1 +
+        ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::Int32Size(
+            static_cast<::PROTOBUF_NAMESPACE_ID::int32>(data_size));
+    }
+    int cached_size = ::PROTOBUF_NAMESPACE_ID::internal::ToCachedSize(data_size);
+    _measure_cached_byte_size_.store(cached_size,
+                                    std::memory_order_relaxed);
+    total_size += data_size;
   }
 
   // .CCGraphRPC.Code code = 1;
@@ -1275,6 +1315,7 @@ void Results::MergeFrom(const Results& from) {
 
   col_name_.MergeFrom(from.col_name_);
   table_.MergeFrom(from.table_);
+  measure_.MergeFrom(from.measure_);
   if (from.code() != 0) {
     _internal_set_code(from._internal_code());
   }
@@ -1303,6 +1344,7 @@ void Results::InternalSwap(Results* other) {
   _internal_metadata_.Swap<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(&other->_internal_metadata_);
   col_name_.InternalSwap(&other->col_name_);
   table_.InternalSwap(&other->table_);
+  measure_.InternalSwap(&other->measure_);
   swap(code_, other->code_);
 }
 

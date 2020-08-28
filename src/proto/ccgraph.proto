@@ -16,8 +16,9 @@ option java_package = "com.ccgraph.ccgraph";
 // }
 enum Code {
   kOk = 0;
-  kAbort = 1;
-  kFatal = 2;
+  kConflict = 1;
+  kAbort = 2;
+  kFatal = 3;
 }
 // message CodeRet {
 //   Code code = 1;
@@ -43,6 +44,7 @@ message Results {
   Code code = 1;
   repeated bytes col_name = 2;
   repeated RetRow table = 3;
+  repeated uint64 measure= 4;
 }
 
 // message TxnID {
