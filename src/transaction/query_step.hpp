@@ -5,6 +5,7 @@
 #include "node.hpp"
 #include "result.hpp"
 #include "consts.hpp"
+#include "cc_ctx.hpp"
 
 #include <atomic>
 #include <vector>
@@ -34,7 +35,7 @@ struct FilterCtx {
 
 
 class Query;
-class CCContex;
+// class CCContex;
 /**
  * Each query would store a vector pointing to each step. deleted after query
  * is done.
@@ -60,6 +61,7 @@ class QueryStep {
   std::vector<size_t> _src_cols, _cols_to_put;
  public:
   QueryStep() : _started(false), _done(false) {}
+  virtual ~QueryStep() {}
   void set_rst(Result* rst) { _rst = rst; }
   Result & get_rst() { return *_rst; }
   bool get_reuse_prev_rst() { return _move_prev_rst; }

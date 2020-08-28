@@ -37,11 +37,15 @@ int main(int argc, char** argv) {
       }
       client.RunTxn(qname, params, false, rc, result_table_col_alias, result_table);
       if (rc == kFatal) {
-        std::cout << result_table[0][0];
+        std::cout << result_table[0][0] << "\n";
         continue;
       }
       if (rc == kAbort) {
-        std::cout << "Abort : " << result_table[0][0];
+        std::cout << "Abort : " << result_table[0][0] << "\n";
+        continue;
+      }
+      if (rc == kConflict) {
+        std::cout << "Conflict : " << result_table[0][0] << "\n";
         continue;
       }
       for (size_t j = 0; j < result_table_col_alias.size(); j++) {

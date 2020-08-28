@@ -43,6 +43,31 @@ class CCFrameworkCore {
     if (!_initialized) throw FatalException("Please initialize ccf core first");
   }
 
+  folly::Future<std::shared_ptr<Query>> runQueryOnce(std::string qname, std::vector<std::string> params, measure_ctx* _measure_ctx=nullptr) {
+    auto q = std::make_shared<Query>();
+    auto ts = _ts_txnid.fetch_add(1);
+    q->set_ts(ts); q->set_txnid(ts);
+    CCContex* ctx = new CCContex;
+    q->set_cc_ctx(ctx);
+    ctx->timestamp = ts;
+    ctx->txn_id = ts;
+
+    ctx->_measure_ctx = (_measure_ctx == nullptr)?new measure_ctx : _measure_ctx;
+
+    _query_builder->build_query(qname, params, q.get());
+
+    for (size_t i = 0; i < q->get_nstep(); i++) {
+      q->get_step(i)->set_cc_ctx(ctx);
+    }
+
+    if (_measure_ctx == nullptr) {
+      ctx->_measure_ctx->txn_time.start();
+    }
+    return _worker->ProcessQuery(q).thenValue([q](folly::Unit)->std::shared_ptr<Query> {
+      LOG_DEBUG("No fatal error? directly return the final rst");
+      return q;
+    });
+  }
  public:
   void init() {
     if (_initialized) throw FatalException("Already initialized");
@@ -81,32 +106,41 @@ class CCFrameworkCore {
 
     _initialized = true;
   }
+  ~CCFrameworkCore() {
+    delete _query_builder;
+    delete _worker;
+    delete _ccgraph;
+    delete _cc_manager;
+    delete _lock_manager;
+    delete _node_index;
+    delete _edge_index;
+    delete _allocator;
+  }
   void loadGraph(const std::string & description_file) {
     GraphLoader loader(_node_index, _edge_index, _schema, [this](std::string qname, std::vector<std::string> params)->RetCode{
-      return runQuery(qname, params).wait().get()->_rc;
+      return runQueryOnce(qname, params).wait().get()->_rc;
     });
     loader.prepare(description_file);
     loader.doLoad();
   }
 
-  folly::Future<std::shared_ptr<Query>> runQuery(std::string qname, std::vector<std::string> params) {
-    auto q = std::make_shared<Query>();
-    auto ts = _ts_txnid.fetch_add(1);
-    q->set_ts(ts); q->set_txnid(ts);
-    CCContex* ctx = new CCContex;
-    q->set_cc_ctx(ctx);
-    ctx->timestamp = ts;
-    ctx->txn_id = ts;
-
-    _query_builder->build_query(qname, params, q.get());
-
-    for (size_t i = 0; i < q->get_nstep(); i++) {
-      q->get_step(i)->set_cc_ctx(ctx);
-    }
-
-    return _worker->ProcessQuery(q).thenValue([q](folly::Unit)->std::shared_ptr<Query> {
-      LOG_DEBUG("No error? directly return the final rst");
-      return q;
+  folly::Future<std::shared_ptr<Query>> runQuery(std::string qname, std::vector<std::string> params, bool retry = false, measure_ctx* _measure_ctx = nullptr) {
+    auto f = runQueryOnce(qname, params, _measure_ctx);
+    if (!retry) return f;
+    return std::move(f).thenValue([this, qname, params, retry](std::shared_ptr<Query> q_ptr){
+      if (q_ptr->_rc == kOk || q_ptr->_rc == kAbort || !retry) {
+        q_ptr->get_cc_ctx()->_measure_ctx->txn_time.stop();
+        delete q_ptr->get_cc_ctx();
+        q_ptr->set_cc_ctx(nullptr);
+        return folly::makeFuture(q_ptr);
+      }
+      if (q_ptr->_rc != kConflict) throw FatalException("fatal error should not enter then value!");
+      measure_ctx* m =  q_ptr->get_cc_ctx()->_measure_ctx;
+      m->retries.inc();
+      q_ptr->get_cc_ctx()->_measure_ctx = nullptr;
+      delete q_ptr->get_cc_ctx();
+      q_ptr->set_cc_ctx(nullptr);
+      return runQuery(qname, params, true, m);
     });
   }
 };

@@ -3,11 +3,13 @@
 #include "type.hpp"
 #include "node.hpp"
 #include "edge.hpp"
+#include "utils/measure.hpp"
 #include <folly/futures/Future.h>
 #include <unordered_map>
 
 class CCContex {
  public:
+  measure_ctx* _measure_ctx = nullptr;
   // false for exclusive, true for share
   std::unordered_map<uint64_t, bool> _lock_history;
   // for 2pl: read history is not placed here. only the original version of those record wrotten 

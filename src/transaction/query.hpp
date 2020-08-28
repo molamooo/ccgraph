@@ -3,7 +3,7 @@
 #include "schema.hpp"
 #include <vector>
 
-class CCContex;
+// class CCContex;
 
 enum QueryRstColType {
   kNodeLabeledId,

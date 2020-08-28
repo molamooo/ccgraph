@@ -20,6 +20,13 @@ using CCGraphRPC::CommandParam;
 using CCGraphRPC::Results;
 using CCGraphRPC::StartParam;
 
+void set_rpc_code(Results* response, RetCode rc) {
+  if (rc == kOk) response->set_code(CCGraphRPC::kOk);
+  else if (rc == kAbort) response->set_code(CCGraphRPC::kAbort);
+  else if (rc == kConflict) response->set_code(CCGraphRPC::kConflict);
+  else if (rc == kFatal) response->set_code(CCGraphRPC::kFatal);
+}
+
 class CCGraphServerImpl final : public CCGraphRPC::CCGraphServer::Service {
  private:
   folly::Promise<folly::Unit> _exit_p;
@@ -31,35 +38,43 @@ class CCGraphServerImpl final : public CCGraphRPC::CCGraphServer::Service {
     for (size_t i = 0; i < request->param_list_size(); i++) {
       params.push_back(request->param_list(i));
     }
+    measure_ctx * m_ctx = new measure_ctx;
     try {
-      while (true) {
-        // todo: implement an async server
-        auto req_ptr = _cc_core->runQuery(request->txn_name(), params).wait().get();
-        if (req_ptr->_rc == kOk) {
-          response->set_code(CCGraphRPC::kOk);
-          auto & rst = req_ptr->get_final_rst();
-          for (size_t j = 0; j < rst.get_cols(); j++) {
-            response->add_col_name(rst.get_col_alias(j));
-          }
-          for (size_t i = 0; i < rst.get_rows(); i++) {
-            auto row = response->add_table();
-            for (size_t j = 0; j < rst.get_cols(); j++) {
-              row->add_one_row(std::move(rst.get_string(i, j)));
-            }
-          }
-          return Status::OK;
-        } 
-        if (req_ptr->_rc != kAbort) throw FatalException("query rc must be ok or abort");
-
-        // LOG_INFO("abort, due to %s", req_ptr->_abort_msg.c_str());
-        if (request->retry() ) {
-          continue;
+      // todo: implement an async server
+      auto req_ptr = _cc_core->runQuery(request->txn_name(), params, request->retry(), m_ctx).wait().get();
+      if (req_ptr->_rc == kOk) {
+        response->set_code(CCGraphRPC::kOk);
+        auto & rst = req_ptr->get_final_rst();
+        for (size_t j = 0; j < rst.get_cols(); j++) {
+          response->add_col_name(rst.get_col_alias(j));
         }
-        response->set_code(CCGraphRPC::kAbort);
-        response->add_table()->add_one_row(req_ptr->_abort_msg);
+        for (size_t i = 0; i < rst.get_rows(); i++) {
+          auto row = response->add_table();
+          for (size_t j = 0; j < rst.get_cols(); j++) {
+            row->add_one_row(std::move(rst.get_string(i, j)));
+          }
+        }
+        // fixme: place measurement
+        response->add_measure(m_ctx->lock_block_time.collect);
+        response->add_measure(m_ctx->cc_time.collect);
+        response->add_measure(m_ctx->txn_time.collect);
+        response->add_measure(m_ctx->used_locks.collect);
+        response->add_measure(m_ctx->reused_locks.collect);
+        response->add_measure(m_ctx->blocked_locks.collect);
+        response->add_measure(m_ctx->retries.collect);
+        delete m_ctx;
         return Status::OK;
       }
+      delete m_ctx;
+      if (req_ptr->_rc != kAbort && 
+          req_ptr->_rc != kConflict)
+        throw FatalException("query rc must be ok or abort");
+
+      set_rpc_code(response, req_ptr->_rc);
+      response->add_table()->add_one_row(req_ptr->_abort_msg);
+      return Status::OK;
     } catch (std::exception & e) {
+      delete m_ctx;
       std::cerr << e.what() << "\n";
       response->set_code(CCGraphRPC::kFatal);
       response->add_table()->add_one_row(e.what());
@@ -194,5 +209,5 @@ int main (int argc, char** argv) {
   f.wait();
   server->Shutdown();
   server->Wait();
-
+  delete ccfcore;
 }

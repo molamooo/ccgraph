@@ -14,7 +14,7 @@ struct Edge {
   label_t _label;
   internal_id_t _internal_id1, _internal_id2;
   labeled_id_t _external_id1, _external_id2;
-  Node *_node1, *_node2;
+  Node *_node1 = nullptr, *_node2 = nullptr;
   // Fixme: maybe need to support locating node with both label and id
   // label_t _label_node1, _label_node2;
   uint8_t _prop[0];

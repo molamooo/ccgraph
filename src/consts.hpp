@@ -10,6 +10,7 @@ enum CompareOp {
 
 enum RetCode {
   kOk = 0,
+  kConflict,
   kAbort,
   kFatal,
 };

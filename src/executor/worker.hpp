@@ -1457,17 +1457,24 @@ class Worker {
           q->_rc = kAbort;
         }
         // todo: reply to client
+      }).thenError(folly::tag_t<CCFail&>{}, [this,q](CCFail const & e){
+        _ccgraph->Abort(q->get_cc_ctx());
+        q->_rc = kConflict;
+        q->_abort_msg = e.what();
       }).thenError(folly::tag_t<AbortException&>{}, [this,q](AbortException const & e){
-        if (dynamic_cast<const AbortException*>(&e)) {
-          // std::cout << "Abort Error : " <<  e.what() << "\n";
-          _ccgraph->Abort(q->get_cc_ctx());
-          q->_rc = kAbort;
-          q->_abort_msg = e.what();
-        } else {
-          LOG_INFO("Fatal error: %s", e.what());
-          // todo: exit gracefully
-          exit(1);
-        }
+        // if (dynamic_cast<const AbortException*>(&e)) {
+        //   // std::cout << "Abort Error : " <<  e.what() << "\n";
+        //   _ccgraph->Abort(q->get_cc_ctx());
+        //   q->_rc = kAbort;
+        //   q->_abort_msg = e.what();
+        // } else {
+        //   LOG_INFO("Fatal error: %s", e.what());
+        //   // todo: exit gracefully
+        //   exit(1);
+        // }
+        _ccgraph->Abort(q->get_cc_ctx());
+        q->_rc = kAbort;
+        q->_abort_msg = e.what();
       });
   }
 };
