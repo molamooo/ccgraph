@@ -488,7 +488,7 @@ class AsyncQueueRWLock {
         break;
       }
     }
-    if (reader == 1 && _upgrade_waiters.front()._ctx == r_locker[0]) {
+    if (reader == 1 && _upgrade_waiters.size() > 0 && _upgrade_waiters.front()._ctx == r_locker[0]) {
       // the only reader left is waiting for w lock; grant write lock
       QueuedReq * req = &_upgrade_waiters.front();
       if (req->_share == true) throw FatalException("reader is waiting for the same read?");
