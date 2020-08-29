@@ -11,9 +11,9 @@
 #include <limits>
 #include <unordered_set>
 
-#ifndef CCGRAPH_ASYNC
-#define CCGRAPH_ASYNC 1
-#endif
+// #ifndef CCGRAPH_ASYNC
+// #define CCGRAPH_ASYNC 1
+// #endif
 
 
 template<typename T>
@@ -61,12 +61,16 @@ double algeo<double>(const double l, const double r, const MathOp op) {
 }
 class Worker {
  private:
-  template<typename T>
-  using sptr = std::shared_ptr<T>;
   using VFuture=folly::Future<folly::Unit>;
   using VPromise=folly::Promise<folly::Unit>;
   template<typename T>
   using Future=folly::Future<T>;
+  template<typename T>
+  using Promise=folly::Promise<T>;
+  template<typename T>
+  using vec=std::vector<T>;
+  template<typename T>
+  using sptr=std::shared_ptr<T>;
 
   CCGraph* _ccgraph = nullptr;
   SchemaManager* _schema = nullptr;
@@ -788,7 +792,7 @@ class Worker {
         if (step->get_label() == 0) {
           throw Unimplemented("Unimplemented get unknown label");
         }
-        auto f = folly::makeFuture();
+        auto f = VFuture();
         for (size_t i = 0; i < prev->get_rst().get_rows(); i++) {
           internal_id_t id = prev->get_rst().get(i, src_col);
           f = std::move(f).thenValue([this, step, id](folly::Unit){
@@ -803,7 +807,7 @@ class Worker {
         if (step->get_label() == 0) {
           throw Unimplemented("Unimplemented get unknown label");
         }
-        auto f = folly::makeFuture();
+        auto f = VFuture();
         for (size_t i = 0; i < prev->get_rst().get_rows(); i++) {
           labeled_id_t id(prev->get_rst().get(i, src_col), step->get_label());
           f = std::move(f).thenValue([this, step, id](folly::Unit){
@@ -816,7 +820,7 @@ class Worker {
       }
       case Result::kEdge: {
         // auto prev = dynamic_cast<EdgeRstListStep*>(_prev_);
-        VFuture f = folly::makeFuture();
+        auto f = VFuture();
         // fixed: set the src_node_col correctly
         size_t src_node_col = step->get_rst().get_col_idx_by_alias(step->_src_node_col_alias);
         if (prev->get_rst().get_type(src_node_col) != Result::kNode) {
@@ -868,7 +872,7 @@ class Worker {
     auto & prev_rst1 = step->get_prev(0)->get_rst(), 
          & prev_rst2 = step->get_prev(1)->get_rst();
     // r = prev_rst1;
-    auto f = folly::makeFuture();
+    auto f = VFuture();
     if (prev_rst2.get_rows() == 0) return f;
     labeled_id_t id2 = extract_node_id(prev_rst2, 0, step->get_src_col(1));
     for (size_t i = 0; i < prev_rst1.get_rows(); i++) {
@@ -900,10 +904,7 @@ class Worker {
   VFuture ProcGetAllNeighbour(QueryStep* _step_) {
     auto step = dynamic_cast<GetAllNeighbourStep*>(_step_);
     auto prev = step->get_prev(0);
-    // step->get_rst().copy_schema(prev->get_rst());
-    // auto prev = dynamic_cast<NodeRstListStep*>(_step_->get_prev(0));
-    // std::vector<Node*> start_nodes = prev->get_rst();
-    auto f = folly::makeFuture();
+    auto f = VFuture();
     // todo: assert the type is node;
     // bug fix: there is racing!!!!!!
     for (size_t i = 0; i < prev->get_rst().get_rows(); i++) {
@@ -937,7 +938,7 @@ class Worker {
   VFuture ProcGetAllEdge(QueryStep* _step_) {
     auto step = dynamic_cast<GetAllEdgeStep*>(_step_);
     auto prev = step->get_prev(0);
-    auto f = folly::makeFuture();
+    auto f = VFuture();
     // todo: assert the type is node;
     for (size_t i = 0; i < prev->get_rst().get_rows(); i++) {
       f = std::move(f).thenValue([this, prev, step, i](folly::Unit){
@@ -963,13 +964,12 @@ class Worker {
     return f;
   }
   VFuture GetAllNeighbourVarLenCore(GetAllNeighbourVarLenStep* step) {
-    auto f = folly::makeFuture();
-    if (step->has_rqst() == false) return f;
+    if (step->has_rqst() == false) return VFuture();
     auto prev = (step->get_prev(0));
     // LOG_VERBOSE("before pop rqst, the head rqst is %llu", std::get<0>(step->_rqst.front()));
     std::tuple<internal_id_t, label_t, size_t, size_t> rqst = step->pop_rqst();
     // LOG_VERBOSE("after pop rqst, the  rqst is %llu", std::get<0>(rqst));
-
+    // fixme: optimize this. pop all request at once, then call get all neighbour for all of them.
     return _ccgraph->GetAllNeighbour(step->get_label(), std::get<0>(rqst), step->get_dir(), step->get_cc_ctx())
       // .via(folly::getGlobalCPUExecutor())
       .thenValue([this, step, rqst, prev](std::shared_ptr<std::vector<Node*>> rst){
@@ -992,25 +992,6 @@ class Worker {
         }
         return folly::makeFuture();
       });
-
-
-    // auto rst = _ccgraph->GetAllNeighbour(step->get_label(), std::get<0>(rqst), step->get_dir(), step->get_cc_ctx()).wait().get();
-    // size_t depth=std::get<2>(rqst)+1;
-    // size_t src_row = std::get<3>(rqst);
-    // for (Node* n : *rst) {
-    //   if (step->should_place_to_rst(n, depth, src_row)) {
-    //     step->get_rst().append_row(src_row, prev->get_rst());
-    //     step->get_rst().set(step->get_rst().get_rows()-1, step->get_col_to_put(), (ResultItem)n);
-    //     step->get_rst().set(step->get_rst().get_rows()-1, step->get_col_to_put(1), depth);
-    //   }
-    //   if (step->terminate(n, depth) == false) {
-    //     // duplicated request is handled inside
-    //     step->append_rqst(n->_internal_id, n->_type, depth, src_row);
-    //   }
-    // }
-    // if (step->has_rqst()) return GetAllNeighbourVarLenCore(step);
-    // return folly::makeFuture();
-
   }
   VFuture ProcGetAllNeigbhourVarLen(QueryStep* _step_) {
     auto step = dynamic_cast<GetAllNeighbourVarLenStep*>(_step_);
@@ -1038,9 +1019,7 @@ class Worker {
     }
     // auto f = folly::makeFuture();
     // f = std::move(f).thenValue([this, step](folly::Unit){
-    return GetAllNeighbourVarLenCore(step).thenValue([](folly::Unit){
-      // LOG_VERBOSE("get varlen future is ready");
-    });
+    return GetAllNeighbourVarLenCore(step);
     // });
     // return f;
   }
@@ -1061,16 +1040,6 @@ class Worker {
       .thenValue([this, step](Node* n){
         step->get_rst().set(0, step->get_col_to_put(), (ResultItem)n);
       });
-    // for (size_t i = 0; i < prev->get_rst().get_rows(); i++) {
-    //   labeled_id_t id = prev->get_rst().get(i, step->get_src_col());
-    //   id.label = step->get_label();
-    //   f = std::move(f).thenValue([this, id, step](folly::Unit){
-    //     return _ccgraph->InsertNode(step->get_label(), id, step->get_cc_ctx());
-    //   }).thenValue([this, step, i](Node* n){
-    //     step->get_rst().set(i, step->get_col_to_put(), (ResultItem)n);
-    //   });
-    // }
-    // return f;
   }
 
   VFuture ProcUpdateNode(QueryStep* _step_) {
@@ -1080,7 +1049,7 @@ class Worker {
     if (src_col_type != Result::kLabeledNodeId &&
         src_col_type != Result::kNode)
       throw QueryException("Update node src must be node id or node");
-    auto f = folly::makeFuture();
+    auto f = VFuture();
     for (size_t i = 0; i < prev->get_rst().get_rows(); i++) {
       f = std::move(f).thenValue([this, step, src_col_type, prev, i](folly::Unit){
         if (src_col_type == Result::kLabeledNodeId) {
@@ -1144,7 +1113,7 @@ class Worker {
       }
     }
     size_t n_rows = std::max(prev1.get_rows(),  prev2.get_rows());
-    auto f = folly::makeFuture();
+    auto f = VFuture();
     for (size_t i = 0; i < n_rows; i++) {
       labeled_id_t id1 = extract_node_id(prev1, prev1_single?0:i, step->get_src_col(0));
       labeled_id_t id2 = extract_node_id(prev2, prev2_single?0:i, step->get_src_col(1));
@@ -1200,7 +1169,7 @@ class Worker {
       }
     }
     size_t n_rows = std::max(prev1.get_rows(),  prev2.get_rows());
-    auto f = folly::makeFuture();
+    auto f = VFuture();
     for (size_t i = 0; i < n_rows; i++) {
       labeled_id_t id1 = extract_id1(prev1, prev1_single?0:i, step->get_src_col(0));
       labeled_id_t id2 = extract_id2(prev2, prev2_single?0:i, step->get_src_col(1));
@@ -1224,7 +1193,7 @@ class Worker {
       }
     }
     size_t n_rows = std::max(prev1.get_rows(),  prev2.get_rows());
-    auto f = folly::makeFuture();
+    auto f = VFuture();
     for (size_t i = 0; i < n_rows; i++) {
       labeled_id_t id1 = extract_id1(prev1, prev1_single?0:i, step->get_src_col(0));
       labeled_id_t id2 = extract_id2(prev2, prev2_single?0:i, step->get_src_col(1));
@@ -1253,7 +1222,7 @@ class Worker {
       }
     }
     size_t n_rows = std::max(prev1.get_rows(),  prev2.get_rows());
-    auto f = folly::makeFuture();
+    auto f = VFuture();
     for (size_t i = 0; i < n_rows; i++) {
       labeled_id_t id1 = extract_id1(prev1, prev1_single?0:i, step->get_src_col(0));
       labeled_id_t id2 = extract_id2(prev2, prev2_single?0:i, step->get_src_col(1));
@@ -1272,7 +1241,7 @@ class Worker {
   }
   VFuture ProcessOneStep(QueryStep* step) {
     step->set_started();
-    auto f = folly::makeFuture();
+    auto f = VFuture();
     switch (step->get_type()) {
       case kNoOp: {
         LOG_VERBOSE("Processing NoOp");
@@ -1310,9 +1279,7 @@ class Worker {
       }
       case kGetAllNeighborVarLen: {
         LOG_VERBOSE("Processing GetAllNeighborVarLen");
-        f=std::move(ProcGetAllNeigbhourVarLen(step)).thenValue([](folly::Unit){
-          // LOG_VERBOSE("porcess one step: get var len is ready");
-        }); break;
+        f=std::move(ProcGetAllNeigbhourVarLen(step)); break;
       }
       case kGetAllEdge: {
         LOG_VERBOSE("Processing GetAllEdge");
@@ -1395,25 +1362,11 @@ class Worker {
       }
     }
     step->set_done();
-#if CCGRAPH_ASYNC
-    /** async */
     return f;
-#else
-    /* sequential */
-    f.wait().value();
-    return folly::makeFuture();
-#endif
   }
   VFuture ProcessStepRecursive(QueryStep* step) {
-#if CCGRAPH_ASYNC
-    /** async */
     return ProcessOneStep(step)
       .via(folly::getGlobalCPUExecutor())
-#else
-    /* sequential */
-    ProcessOneStep(step).wait().get();
-    return folly::makeFuture()
-#endif
       .thenValue([this, step](folly::Unit){
         if (Config::get()->print_mid_rst) {
           LOG_VERBOSE("printing mid result");
@@ -1425,7 +1378,7 @@ class Worker {
           throw Unimplemented("Sequential execution");
         } else if (nexts == 0) {
           LOG_VERBOSE("no more next steps");
-          return folly::makeFuture();
+          return VFuture();
         }
         // LOG_VERBOSE("running next step");
         QueryStep* next_step = step->get_next(0);
@@ -1435,18 +1388,11 @@ class Worker {
   VFuture ProcessQuery(std::shared_ptr<Query> q) {
     // the initial point of processing a query, no reentrant
     QueryStep* start = q->get_first_step();
-    // fixme: remove sequential
-#if CCGRAPH_ASYNC
-    /** async */
-    return folly::makeFuture().via(folly::getGlobalCPUExecutor()).thenValue([this, start](folly::Unit){
-      return ProcessStepRecursive(start);
-    })
-#else
-    /* sequential */
-    ProcessStepRecursive(start).wait().get();
     return folly::makeFuture()
-#endif
-      .thenValue([this, q](folly::Unit){
+      .via(folly::getGlobalCPUExecutor())
+      .thenValue([this, start](folly::Unit){
+        return ProcessStepRecursive(start);
+      }).thenValue([this, q](folly::Unit){
         LOG_DEBUG("no error, trying to commit");
         if (_ccgraph->CommitCheck(q->get_cc_ctx())) {
           q->write_final_rst();
@@ -1462,16 +1408,6 @@ class Worker {
         q->_rc = kConflict;
         q->_abort_msg = e.what();
       }).thenError(folly::tag_t<AbortException&>{}, [this,q](AbortException const & e){
-        // if (dynamic_cast<const AbortException*>(&e)) {
-        //   // std::cout << "Abort Error : " <<  e.what() << "\n";
-        //   _ccgraph->Abort(q->get_cc_ctx());
-        //   q->_rc = kAbort;
-        //   q->_abort_msg = e.what();
-        // } else {
-        //   LOG_INFO("Fatal error: %s", e.what());
-        //   // todo: exit gracefully
-        //   exit(1);
-        // }
         _ccgraph->Abort(q->get_cc_ctx());
         q->_rc = kAbort;
         q->_abort_msg = e.what();

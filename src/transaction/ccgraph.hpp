@@ -11,14 +11,16 @@
 
 class CCGraph {
  private:
-  template<typename T>
-  using vec=std::vector<T>;
-  template<typename T>
-  using sptr=std::shared_ptr<T>;
+  using VFuture=folly::Future<folly::Unit>;
+  using VPromise=folly::Promise<folly::Unit>;
   template<typename T>
   using Future=folly::Future<T>;
   template<typename T>
   using Promise=folly::Promise<T>;
+  template<typename T>
+  using vec=std::vector<T>;
+  template<typename T>
+  using sptr=std::shared_ptr<T>;
 
   CCManager2PL* _cc_manager;
  public:

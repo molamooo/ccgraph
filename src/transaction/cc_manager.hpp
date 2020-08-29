@@ -17,12 +17,6 @@ enum OpType {
 };
 class CCManager {
  private:
-  using VFuture=folly::Future<folly::Unit>;
-  using VPromise=folly::Promise<folly::Unit>;
-  template<typename T>
-  using Future=folly::Future<T>;
-  template<typename T>
-  using Promise=folly::Promise<T>;
  protected:
   NodeIndex* _node_index = nullptr;
   LabelEdgeIndex* _edge_index = nullptr;
@@ -59,7 +53,7 @@ class CCManager {
 
 class CCManager2PL : public CCManager {
  private:
-  
+
   using VFuture=folly::Future<folly::Unit>;
   using VPromise=folly::Promise<folly::Unit>;
   template<typename T>
@@ -79,7 +73,7 @@ class CCManager2PL : public CCManager {
 
   VFuture GrantAccess(uint64_t hashed, const bool share, CCContex* ctx) {
     // LOG_VERBOSE("locking %llu with share=%d", hashed, share);
-    auto start_time = ctx->_measure_ctx->cc_time.start();
+    ctx->_measure_ctx->cc_time.start();
     int state = ctx->Locked(hashed);
     if (state == 0) {
       // new lock to be granted
@@ -90,7 +84,7 @@ class CCManager2PL : public CCManager {
         f.value();
         ctx->_lock_history[hashed] = share;
         ctx->_measure_ctx->cc_time.stop();
-        return folly::makeFuture();
+        return VFuture();
       } else {
         // todo: the measurement is cross different executor, maybe we need to do measurement in lock
         return std::move(f).via(folly::getGlobalCPUExecutor())
@@ -117,7 +111,7 @@ class CCManager2PL : public CCManager {
       f.value();
       ctx->_lock_history[hashed] = share;
       ctx->_measure_ctx->cc_time.stop();
-      return folly::makeFuture();
+      return VFuture();
     } else {
       return std::move(f).via(folly::getGlobalCPUExecutor())
         .thenValue([this, hashed, share, ctx](folly::Unit){

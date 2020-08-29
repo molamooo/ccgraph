@@ -17,6 +17,17 @@
 
 class CCFrameworkCore {
  private:
+  using VFuture=folly::Future<folly::Unit>;
+  using VPromise=folly::Promise<folly::Unit>;
+  template<typename T>
+  using Future=folly::Future<T>;
+  template<typename T>
+  using Promise=folly::Promise<T>;
+  template<typename T>
+  using vec=std::vector<T>;
+  template<typename T>
+  using sptr=std::shared_ptr<T>;
+
   bool _initialized = false;
   // Config _config;
 
@@ -43,7 +54,7 @@ class CCFrameworkCore {
     if (!_initialized) throw FatalException("Please initialize ccf core first");
   }
 
-  folly::Future<std::shared_ptr<Query>> runQueryOnce(std::string qname, std::vector<std::string> params, measure_ctx* _measure_ctx=nullptr) {
+  Future<sptr<Query>> runQueryOnce(std::string qname, std::vector<std::string> params, measure_ctx* _measure_ctx=nullptr) {
     auto q = std::make_shared<Query>();
     auto ts = _ts_txnid.fetch_add(1);
     q->set_ts(ts); q->set_txnid(ts);
@@ -63,7 +74,8 @@ class CCFrameworkCore {
     if (_measure_ctx == nullptr) {
       ctx->_measure_ctx->txn_time.start();
     }
-    return _worker->ProcessQuery(q).thenValue([q](folly::Unit)->std::shared_ptr<Query> {
+
+    return _worker->ProcessQuery(q).thenValue([q](folly::Unit)->sptr<Query> {
       LOG_DEBUG("No fatal error? directly return the final rst");
       return q;
     });
@@ -124,15 +136,15 @@ class CCFrameworkCore {
     loader.doLoad();
   }
 
-  folly::Future<std::shared_ptr<Query>> runQuery(std::string qname, std::vector<std::string> params, bool retry = false, measure_ctx* _measure_ctx = nullptr) {
+  Future<sptr<Query>> runQuery(std::string qname, std::vector<std::string> params, bool retry = false, measure_ctx* _measure_ctx = nullptr) {
     auto f = runQueryOnce(qname, params, _measure_ctx);
     if (!retry) return f;
-    return std::move(f).thenValue([this, qname, params, retry](std::shared_ptr<Query> q_ptr){
+    return std::move(f).thenValue([this, qname, params, retry](std::shared_ptr<Query> q_ptr)->Future<sptr<Query>>{
       if (q_ptr->_rc == kOk || q_ptr->_rc == kAbort || !retry) {
         q_ptr->get_cc_ctx()->_measure_ctx->txn_time.stop();
         delete q_ptr->get_cc_ctx();
         q_ptr->set_cc_ctx(nullptr);
-        return folly::makeFuture(q_ptr);
+        return q_ptr;
       }
       if (q_ptr->_rc != kConflict) throw FatalException("fatal error should not enter then value!");
       measure_ctx* m =  q_ptr->get_cc_ctx()->_measure_ctx;
