@@ -40,6 +40,7 @@ class CCGraphServerImpl final : public CCGraphRPC::CCGraphServer::Service {
     }
     measure_ctx * m_ctx = new measure_ctx;
     try {
+      m_ctx->txn_time.start();
       // todo: implement an async server
       auto req_ptr = _cc_core->runQuery(request->txn_name(), params, request->retry(), m_ctx).wait().get();
       if (req_ptr->_rc == kOk) {
@@ -200,7 +201,7 @@ int main (int argc, char** argv) {
   // clients. In this case it corresponds to an *synchronous* service.
   builder.RegisterService(&service);
   ResourceQuota rq;
-  rq.SetMaxThreads(100);
+  rq.SetMaxThreads(46);
   builder.SetResourceQuota(rq);
   // Finally assemble the server.
   std::unique_ptr<Server> server(builder.BuildAndStart());

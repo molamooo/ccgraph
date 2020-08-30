@@ -16,17 +16,18 @@
 #include <folly/executors/GlobalExecutor.h>
 
 class CCFrameworkCore {
- private:
-  using VFuture=folly::Future<folly::Unit>;
-  using VPromise=folly::Promise<folly::Unit>;
+ public:
+  using VFuture = CCManager2PL::VFuture;
+  using VPromise = CCManager2PL::VPromise;
   template<typename T>
-  using Future=folly::Future<T>;
+  using Future = CCManager2PL::Future<T>;
   template<typename T>
-  using Promise=folly::Promise<T>;
+  using Promise = CCManager2PL::Promise<T>;
   template<typename T>
   using vec=std::vector<T>;
   template<typename T>
   using sptr=std::shared_ptr<T>;
+ private:
 
   bool _initialized = false;
   // Config _config;
@@ -75,10 +76,15 @@ class CCFrameworkCore {
       ctx->_measure_ctx->txn_time.start();
     }
 
+#ifdef NO_THEN
+    _worker->ProcessQuery(q).get();
+    return q;
+#else
     return _worker->ProcessQuery(q).thenValue([q](folly::Unit)->sptr<Query> {
       LOG_DEBUG("No fatal error? directly return the final rst");
       return q;
     });
+#endif
   }
  public:
   void init() {
@@ -139,7 +145,11 @@ class CCFrameworkCore {
   Future<sptr<Query>> runQuery(std::string qname, std::vector<std::string> params, bool retry = false, measure_ctx* _measure_ctx = nullptr) {
     auto f = runQueryOnce(qname, params, _measure_ctx);
     if (!retry) return f;
+#ifdef NO_THEN
+    sptr<Query> q_ptr = f.wait().value();
+#else
     return std::move(f).thenValue([this, qname, params, retry](std::shared_ptr<Query> q_ptr)->Future<sptr<Query>>{
+#endif
       if (q_ptr->_rc == kOk || q_ptr->_rc == kAbort || !retry) {
         q_ptr->get_cc_ctx()->_measure_ctx->txn_time.stop();
         delete q_ptr->get_cc_ctx();
@@ -153,6 +163,9 @@ class CCFrameworkCore {
       delete q_ptr->get_cc_ctx();
       q_ptr->set_cc_ctx(nullptr);
       return runQuery(qname, params, true, m);
+#ifdef NO_THEN
+#else
     });
+#endif
   }
 };

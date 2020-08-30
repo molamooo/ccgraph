@@ -60,17 +60,18 @@ double algeo<double>(const double l, const double r, const MathOp op) {
   }
 }
 class Worker {
- private:
-  using VFuture=folly::Future<folly::Unit>;
-  using VPromise=folly::Promise<folly::Unit>;
+ public:
+  using VFuture = CCManager2PL::VFuture;
+  using VPromise = CCManager2PL::VPromise;
   template<typename T>
-  using Future=folly::Future<T>;
+  using Future = CCManager2PL::Future<T>;
   template<typename T>
-  using Promise=folly::Promise<T>;
+  using Promise = CCManager2PL::Promise<T>;
   template<typename T>
   using vec=std::vector<T>;
   template<typename T>
   using sptr=std::shared_ptr<T>;
+ private:
 
   CCGraph* _ccgraph = nullptr;
   SchemaManager* _schema = nullptr;
@@ -795,11 +796,16 @@ class Worker {
         auto f = VFuture();
         for (size_t i = 0; i < prev->get_rst().get_rows(); i++) {
           internal_id_t id = prev->get_rst().get(i, src_col);
+#ifdef NO_THEN
+          Node* n = _ccgraph->GetNodeViaInternalId(id, step->get_cc_ctx()).get();
+          step->get_rst().set(i, col_to_put, (ResultItem)n);
+#else
           f = std::move(f).thenValue([this, step, id](folly::Unit){
             return _ccgraph->GetNodeViaInternalId(id, step->get_cc_ctx());
           }).thenValue([this, step, col_to_put, i](Node* n){
             step->get_rst().set(i, col_to_put, (ResultItem)n);
           });
+#endif
         }
         return f;
       }
@@ -810,11 +816,16 @@ class Worker {
         auto f = VFuture();
         for (size_t i = 0; i < prev->get_rst().get_rows(); i++) {
           labeled_id_t id(prev->get_rst().get(i, src_col), step->get_label());
+#ifdef NO_THEN
+          Node* n = _ccgraph->GetNodeViaLabeledId(step->get_label(), id, step->get_cc_ctx()).get();
+          step->get_rst().set(i, col_to_put, (ResultItem)n);
+#else
           f = std::move(f).thenValue([this, step, id](folly::Unit){
             return _ccgraph->GetNodeViaLabeledId(step->get_label(), id, step->get_cc_ctx());
           }).thenValue([this, step, col_to_put, i](Node* n){
             step->get_rst().set(i, col_to_put, (ResultItem)n);
           });
+#endif
         }
         return f;
       }
@@ -844,11 +855,16 @@ class Worker {
           else 
             throw QueryException("get node from edge, but src node does match edge's id");
           
+#ifdef NO_THEN
+          Node* n = _ccgraph->AccessNode(dst_n, true, step->get_cc_ctx()).get();
+          step->get_rst().set(i, col_to_put, (ResultItem)n);
+#else
           f = std::move(f).thenValue([this, step, dst_n](folly::Unit){
             return _ccgraph->AccessNode(dst_n, true, step->get_cc_ctx());
           }).thenValue([step, i, col_to_put](Node* n){
             step->get_rst().set(i, col_to_put, (ResultItem)n);
           });
+#endif
         }
         return f;
       }
@@ -886,6 +902,13 @@ class Worker {
       if (step->get_dir() == dir_in) {
         labeled_id_t t = id1; id1 = id2; id2 = t;
       }
+#ifdef NO_THEN
+      Edge* e = _ccgraph->GetEdgeViaLabeledId(step->get_label(), id1, id2, step->get_cc_ctx()).get();
+      if (e == nullptr && step->get_dir() == dir_bidir) {
+        e = _ccgraph->GetEdgeViaLabeledId(step->get_label(), id2, id1, step->get_cc_ctx()).get();
+      }
+      step->get_rst().set(i, step->get_col_to_put(), ResultItem(e));
+#else
       f = std::move(f).thenValue([this, step, id1, id2](folly::Unit){
         return _ccgraph->GetEdgeViaLabeledId(step->get_label(), id1, id2, step->get_cc_ctx());
       }).thenValue([this, step, i, id1, id2](Edge* e){
@@ -898,6 +921,7 @@ class Worker {
         step->get_rst().set(i, step->get_col_to_put(), ResultItem(e));
         return folly::makeFuture();
       });
+#endif
     }
     return f;
   }
@@ -908,6 +932,28 @@ class Worker {
     // todo: assert the type is node;
     // bug fix: there is racing!!!!!!
     for (size_t i = 0; i < prev->get_rst().get_rows(); i++) {
+#ifdef NO_THEN
+      Node* n = (Node*)(prev->get_rst().get(i, step->get_src_col()));
+      if (n == nullptr) {
+        step->get_rst().append_row(i, prev->get_rst());
+        step->get_rst().set(step->get_rst().get_rows()-1, step->get_col_to_put(), 0);
+        continue;
+      }
+      sptr<std::vector<Node*>> rst = _ccgraph->GetAllNeighbour(step->get_label(), n->_internal_id, step->get_dir(), step->get_cc_ctx()).get();
+      bool placed = false;
+      for (Node* n : *rst) {
+        if (step->_filter_node_label && n->_type != step->_node_label) {
+          continue;
+        }
+        step->get_rst().append_row(i, prev->get_rst());
+        step->get_rst().set(step->get_rst().get_rows()-1, step->get_col_to_put(), (ResultItem)n);
+        placed = true;
+      }
+      if (!placed && step->_optional) {
+        step->get_rst().append_row(i, prev->get_rst());
+        step->get_rst().set(step->get_rst().get_rows()-1, step->get_col_to_put(), 0);
+      }
+#else
       f = std::move(f).thenValue([this, prev, step, i](folly::Unit){
         Node* n = (Node*)(prev->get_rst().get(i, step->get_src_col()));
         if (n == nullptr) {
@@ -932,6 +978,7 @@ class Worker {
             }
           });
       });
+#endif
     }
     return f;
   }
@@ -941,6 +988,23 @@ class Worker {
     auto f = VFuture();
     // todo: assert the type is node;
     for (size_t i = 0; i < prev->get_rst().get_rows(); i++) {
+#ifdef NO_THEN
+      Node* n = (Node*)(prev->get_rst().get(i, step->get_src_col()));
+      if (n == nullptr) {
+        step->get_rst().append_row(i, prev->get_rst());
+        step->get_rst().set(step->get_rst().get_rows()-1, step->get_col_to_put(), 0);
+        continue;
+      }
+      sptr<std::vector<Edge*>> rst = _ccgraph->GetAllEdge(step->get_label(), n->_internal_id, step->get_dir(), step->get_cc_ctx()).get();
+      if (rst->size() == 0 && step->_optional) {
+        step->get_rst().append_row(i, prev->get_rst());
+        step->get_rst().set(step->get_rst().get_rows()-1, step->get_col_to_put(), 0);
+      }
+      for (Edge* e : *rst) {
+        step->get_rst().append_row(i, prev->get_rst());
+        step->get_rst().set(step->get_rst().get_rows()-1, step->get_col_to_put(), (ResultItem)e);
+      }
+#else
       f = std::move(f).thenValue([this, prev, step, i](folly::Unit){
         Node* n = (Node*)(prev->get_rst().get(i, step->get_src_col()));
         if (n == nullptr) {
@@ -960,19 +1024,48 @@ class Worker {
             }
           });
       });
+#endif
     }
     return f;
   }
   VFuture GetAllNeighbourVarLenCore(GetAllNeighbourVarLenStep* step) {
     if (step->has_rqst() == false) return VFuture();
     auto prev = (step->get_prev(0));
+#ifdef NO_THEN
+    std::queue<std::tuple<internal_id_t, label_t, size_t, size_t>> all_rqsts = std::move(step->_rqst);
+    while (all_rqsts.size() > 0) {
+      std::tuple<internal_id_t, label_t, size_t, size_t> rqst = all_rqsts.front();
+      all_rqsts.pop();
+      sptr<vec<Node*>> rst = _ccgraph->GetAllNeighbour(step->get_label(), std::get<0>(rqst), step->get_dir(), step->get_cc_ctx()).get();
+      size_t depth=std::get<2>(rqst)+1;
+      size_t src_row = std::get<3>(rqst);
+      for (Node* n : *rst) {
+        if (step->should_place_to_rst(n, depth, src_row)) {
+          step->get_rst().append_row(src_row, prev->get_rst());
+          step->get_rst().set(step->get_rst().get_rows()-1, step->get_col_to_put(), (ResultItem)n);
+          step->get_rst().set(step->get_rst().get_rows()-1, step->get_col_to_put(1), depth);
+        }
+        if (step->terminate(n, depth) == false) {
+          // duplicated request is handled inside
+          step->append_rqst(n->_internal_id, n->_type, depth, src_row);
+        }
+      }
+    }
+    if (step->has_rqst()) return GetAllNeighbourVarLenCore(step);
+    return VFuture();
+#else
     // LOG_VERBOSE("before pop rqst, the head rqst is %llu", std::get<0>(step->_rqst.front()));
-    std::tuple<internal_id_t, label_t, size_t, size_t> rqst = step->pop_rqst();
+    // std::tuple<internal_id_t, label_t, size_t, size_t> rqst = step->pop_rqst();
     // LOG_VERBOSE("after pop rqst, the  rqst is %llu", std::get<0>(rqst));
     // fixme: optimize this. pop all request at once, then call get all neighbour for all of them.
-    return _ccgraph->GetAllNeighbour(step->get_label(), std::get<0>(rqst), step->get_dir(), step->get_cc_ctx())
-      // .via(folly::getGlobalCPUExecutor())
-      .thenValue([this, step, rqst, prev](std::shared_ptr<std::vector<Node*>> rst){
+    std::queue<std::tuple<internal_id_t, label_t, size_t, size_t>> all_rqsts = std::move(step->_rqst);
+    auto f = VFuture();
+    while (all_rqsts.size() > 0) {
+      std::tuple<internal_id_t, label_t, size_t, size_t> rqst = all_rqsts.front();
+      all_rqsts.pop();
+      f = std::move(f).thenValue([this, step, rqst](folly::Unit){
+        return _ccgraph->GetAllNeighbour(step->get_label(), std::get<0>(rqst), step->get_dir(), step->get_cc_ctx());
+      }).thenValue([step, rqst, prev, this](sptr<vec<Node*>> rst){
         size_t depth=std::get<2>(rqst)+1;
         size_t src_row = std::get<3>(rqst);
         for (Node* n : *rst) {
@@ -986,12 +1079,13 @@ class Worker {
             step->append_rqst(n->_internal_id, n->_type, depth, src_row);
           }
         }
-        if (step->has_rqst()) {
-            return GetAllNeighbourVarLenCore(step);
-          // });
-        }
-        return folly::makeFuture();
       });
+    }
+    return std::move(f).thenValue([this, step](folly::Unit){
+      if (step->has_rqst()) return GetAllNeighbourVarLenCore(step);
+      return VFuture();
+    });
+#endif
   }
   VFuture ProcGetAllNeigbhourVarLen(QueryStep* _step_) {
     auto step = dynamic_cast<GetAllNeighbourVarLenStep*>(_step_);
@@ -1036,10 +1130,16 @@ class Worker {
     }
     labeled_id_t id = prev->get_rst().get(0, step->get_src_col());
     id.label = step->get_label();
+#ifdef NO_THEN
+    Node* n = _ccgraph->InsertNode(step->get_label(), id, step->get_cc_ctx()).get();
+    step->get_rst().set(0, step->get_col_to_put(), (ResultItem)n);
+    return VFuture();
+#else
     return _ccgraph->InsertNode(step->get_label(), id, step->get_cc_ctx())
       .thenValue([this, step](Node* n){
         step->get_rst().set(0, step->get_col_to_put(), (ResultItem)n);
       });
+#endif
   }
 
   VFuture ProcUpdateNode(QueryStep* _step_) {
@@ -1051,6 +1151,20 @@ class Worker {
       throw QueryException("Update node src must be node id or node");
     auto f = VFuture();
     for (size_t i = 0; i < prev->get_rst().get_rows(); i++) {
+#ifdef NO_THEN
+      Node* n;
+      if (src_col_type == Result::kLabeledNodeId) {
+        labeled_id_t id;
+        id = prev->get_rst().get(i, step->get_src_col());
+        id.label = step->get_label();
+        n = _ccgraph->UpdateNodeViaLabeledId(step->get_label(), id, step->get_cc_ctx()).get();
+      }
+      else {// todo: may need to check the label, see if matching
+        internal_id_t id = ((Node*)(prev->get_rst().get(i, step->get_src_col())))->_internal_id;
+        n = _ccgraph->UpdateNodeViaInternalId(id, step->get_cc_ctx()).get();
+      }
+      step->get_rst().set(i, step->get_col_to_put(), (ResultItem)n);
+#else
       f = std::move(f).thenValue([this, step, src_col_type, prev, i](folly::Unit){
         if (src_col_type == Result::kLabeledNodeId) {
           labeled_id_t id;
@@ -1065,6 +1179,7 @@ class Worker {
       }).thenValue([this, step, i](Node* n){
         step->get_rst().set(i, step->get_col_to_put(), (ResultItem)n);
       });
+#endif
     }
     return f;
   }
@@ -1076,6 +1191,19 @@ class Worker {
     if (src_col_type != Result::kUINT64 &&
         src_col_type != Result::kNode)
       throw QueryException("Delete node src must be node id or node");
+#ifdef NO_THEN
+    for (size_t i = 0; i < prev->get_rst().get_rows(); i++) {
+      if (src_col_type == Result::kUINT64) {
+        labeled_id_t id = prev->get_rst().get(i, step->get_src_col());
+        id.label = step->get_label();
+        _ccgraph->DeleteNodeViaLabeledId(step->get_label(), id, step->get_cc_ctx()).get();
+      } else {// todo: may need to check the label, see if matching
+        internal_id_t id = ((Node*)(prev->get_rst().get(i, step->get_src_col())))->_internal_id;
+        _ccgraph->DeleteNodeViaInternalId(id, step->get_cc_ctx()).get();
+      }
+    }
+    return VFuture();
+#else
     auto f = folly::makeFuture();
     for (size_t i = 0; i < prev->get_rst().get_rows(); i++) {
       if (src_col_type == Result::kUINT64) {
@@ -1098,6 +1226,7 @@ class Worker {
       }
     }
     return f;
+#endif
   }
 
 
@@ -1115,6 +1244,15 @@ class Worker {
     size_t n_rows = std::max(prev1.get_rows(),  prev2.get_rows());
     auto f = VFuture();
     for (size_t i = 0; i < n_rows; i++) {
+#ifdef NO_THEN
+      labeled_id_t id1 = extract_node_id(prev1, prev1_single?0:i, step->get_src_col(0));
+      labeled_id_t id2 = extract_node_id(prev2, prev2_single?0:i, step->get_src_col(1));
+      if (step->get_dir() == dir_in) {
+        labeled_id_t t = id1; id1 = id2; id2 = t;
+      }
+      Edge* e = _ccgraph->CreateEdgeViaLabeledId(step->get_label(), id1, id2, step->get_cc_ctx()).get();
+      step->get_rst().set(i, step->get_col_to_put(), (ResultItem)e);
+#else
       labeled_id_t id1 = extract_node_id(prev1, prev1_single?0:i, step->get_src_col(0));
       labeled_id_t id2 = extract_node_id(prev2, prev2_single?0:i, step->get_src_col(1));
       f = std::move(f).thenValue([this, id1, id2, step](folly::Unit)mutable{
@@ -1125,6 +1263,7 @@ class Worker {
       }).thenValue([this, step, i](Edge* e){
         step->get_rst().set(i, step->get_col_to_put(), (ResultItem)e);
       });
+#endif
     }
     return f;
   }
@@ -1171,6 +1310,12 @@ class Worker {
     size_t n_rows = std::max(prev1.get_rows(),  prev2.get_rows());
     auto f = VFuture();
     for (size_t i = 0; i < n_rows; i++) {
+#ifdef NO_THEN
+      labeled_id_t id1 = extract_id1(prev1, prev1_single?0:i, step->get_src_col(0));
+      labeled_id_t id2 = extract_id2(prev2, prev2_single?0:i, step->get_src_col(1));
+      Edge* e = _ccgraph->UpdateEdge(step->get_label(), id1, id2, step->get_cc_ctx()).get();
+      step->get_rst().set(i, step->get_col_to_put(), (ResultItem)e);
+#else
       labeled_id_t id1 = extract_id1(prev1, prev1_single?0:i, step->get_src_col(0));
       labeled_id_t id2 = extract_id2(prev2, prev2_single?0:i, step->get_src_col(1));
       f = std::move(f).thenValue([this, id1, id2, step](folly::Unit){
@@ -1178,6 +1323,7 @@ class Worker {
       }).thenValue([this, step, i](Edge* e){
         step->get_rst().set(i, step->get_col_to_put(), (ResultItem)e);
       });
+#endif
     }
     return f;
   }
@@ -1195,6 +1341,14 @@ class Worker {
     size_t n_rows = std::max(prev1.get_rows(),  prev2.get_rows());
     auto f = VFuture();
     for (size_t i = 0; i < n_rows; i++) {
+#ifdef NO_THEN
+      labeled_id_t id1 = extract_id1(prev1, prev1_single?0:i, step->get_src_col(0));
+      labeled_id_t id2 = extract_id2(prev2, prev2_single?0:i, step->get_src_col(1));
+      std::tuple<Edge*, bool> val = _ccgraph->UpsertEdge(step->get_label(), id1, id2, step->get_cc_ctx()).get();
+      Edge* e = std::get<0>(val); bool created = std::get<1>(val);
+      step->get_rst().set(i, step->get_col_to_put(0), (ResultItem)e);
+      step->get_rst().set(i, step->get_col_to_put(1), created?1:0);
+#else
       labeled_id_t id1 = extract_id1(prev1, prev1_single?0:i, step->get_src_col(0));
       labeled_id_t id2 = extract_id2(prev2, prev2_single?0:i, step->get_src_col(1));
       f = std::move(f).thenValue([this, id1, id2, step](folly::Unit){
@@ -1204,6 +1358,7 @@ class Worker {
         step->get_rst().set(i, step->get_col_to_put(0), (ResultItem)e);
         step->get_rst().set(i, step->get_col_to_put(1), created?1:0);
       });
+#endif
     }
     return f;
   }
@@ -1224,11 +1379,17 @@ class Worker {
     size_t n_rows = std::max(prev1.get_rows(),  prev2.get_rows());
     auto f = VFuture();
     for (size_t i = 0; i < n_rows; i++) {
+#ifdef NO_THEN
+      labeled_id_t id1 = extract_id1(prev1, prev1_single?0:i, step->get_src_col(0));
+      labeled_id_t id2 = extract_id2(prev2, prev2_single?0:i, step->get_src_col(1));
+      _ccgraph->DeleteEdge(step->get_label(), id1, id2, step->get_cc_ctx()).get();
+#else
       labeled_id_t id1 = extract_id1(prev1, prev1_single?0:i, step->get_src_col(0));
       labeled_id_t id2 = extract_id2(prev2, prev2_single?0:i, step->get_src_col(1));
       f = std::move(f).thenValue([this, id1, id2, step](folly::Unit){
         return _ccgraph->DeleteEdge(step->get_label(), id1, id2, step->get_cc_ctx());
       }).thenValue([this, step, i](Edge*){});
+#endif
     }
     return f;
   } 
@@ -1365,9 +1526,17 @@ class Worker {
     return f;
   }
   VFuture ProcessStepRecursive(QueryStep* step) {
+
+#ifdef NO_THEN
+    ProcessOneStep(step).get();
+#else
     return ProcessOneStep(step)
+#ifdef NO_THREAD
+#else
       .via(folly::getGlobalCPUExecutor())
+#endif
       .thenValue([this, step](folly::Unit){
+#endif
         if (Config::get()->print_mid_rst) {
           LOG_VERBOSE("printing mid result");
           step->get_rst().print();
@@ -1383,11 +1552,37 @@ class Worker {
         // LOG_VERBOSE("running next step");
         QueryStep* next_step = step->get_next(0);
         return ProcessStepRecursive(next_step);
+#ifdef NO_THEN
+#else
       });
+#endif
   }
   VFuture ProcessQuery(std::shared_ptr<Query> q) {
     // the initial point of processing a query, no reentrant
     QueryStep* start = q->get_first_step();
+#ifdef NO_THEN
+    try {
+      ProcessStepRecursive(start).get();
+      LOG_DEBUG("no error, trying to commit");
+      if (_ccgraph->CommitCheck(q->get_cc_ctx())) {
+        q->write_final_rst();
+        _ccgraph->Commit(q->get_cc_ctx());
+        q->_rc = kOk;
+      } else {
+        _ccgraph->Abort(q->get_cc_ctx());
+        q->_rc = kAbort;
+      }
+    } catch (CCFail & e) {
+      _ccgraph->Abort(q->get_cc_ctx());
+      q->_rc = kConflict;
+      q->_abort_msg = e.what();
+    } catch (AbortException & e) {
+      _ccgraph->Abort(q->get_cc_ctx());
+      q->_rc = kAbort;
+      q->_abort_msg = e.what();
+    }
+    return VFuture();
+#else
     return folly::makeFuture()
       .via(folly::getGlobalCPUExecutor())
       .thenValue([this, start](folly::Unit){
@@ -1412,5 +1607,6 @@ class Worker {
         q->_rc = kAbort;
         q->_abort_msg = e.what();
       });
+#endif
   }
 };

@@ -11,6 +11,9 @@
 #include <folly/futures/Future.h>
 #include <folly/executors/GlobalExecutor.h>
 
+#define NO_THEN
+// #define NO_THREAD
+
 enum OpType {
   kRead=0,
   kWrite,
@@ -51,20 +54,56 @@ class CCManager {
 };
 
 
-class CCManager2PL : public CCManager {
- private:
+struct WrapUnit {
+  constexpr bool operator==(const WrapUnit& /*other*/) const {
+    return true;
+  }
+  constexpr bool operator!=(const WrapUnit& /*other*/) const {
+    return false;
+  }
+};
 
+template<typename T>
+struct Wrap{
+  T _v;
+  Wrap(const T & v) : _v(v) {}
+  Wrap(T && v) : _v(v) {}
+  Wrap&& wait() { return std::move(*this); }
+  T get() { return _v; }
+  T value() { return _v; }
+};
+
+template<>
+struct Wrap<WrapUnit>{
+  Wrap() {}
+  WrapUnit get() { return WrapUnit(); }
+  WrapUnit value() { return WrapUnit(); }
+};
+
+
+class CCManager2PL : public CCManager {
+ public:
+#ifdef NO_THEN
+  using VFuture=Wrap<WrapUnit>;
+  using VPromise=Wrap<WrapUnit>;
+  template<typename T>
+  using Future=Wrap<T>;
+  template<typename T>
+  using Promise=Wrap<T>;
+#else
   using VFuture=folly::Future<folly::Unit>;
   using VPromise=folly::Promise<folly::Unit>;
   template<typename T>
   using Future=folly::Future<T>;
   template<typename T>
   using Promise=folly::Promise<T>;
+#endif
   template<typename T>
   using vec=std::vector<T>;
   template<typename T>
   using sptr=std::shared_ptr<T>;
 
+ private:
   LockManager* _locks;
   Allocator* _allocator;
   SchemaManager* _schema;
@@ -86,8 +125,24 @@ class CCManager2PL : public CCManager {
         ctx->_measure_ctx->cc_time.stop();
         return VFuture();
       } else {
+#ifdef NO_THEN
+        f.wait().value();
+        ctx->_lock_history[hashed] = share;
+        { // measurement
+          measure_ctx* m = ctx->_measure_ctx;
+          m->cc_time.stop();
+          m->lock_block_time.stop(m->cc_time.start_point);
+          m->blocked_locks.inc();
+        }
+        return VFuture();
+#else
         // todo: the measurement is cross different executor, maybe we need to do measurement in lock
+#ifdef NO_THREAD
+        f.wait().value();
+        return VFuture()
+#else
         return std::move(f).via(folly::getGlobalCPUExecutor())
+#endif
           .thenValue([this, hashed, share, ctx](folly::Unit){
             ctx->_lock_history[hashed] = share;
             { // measurement
@@ -97,13 +152,23 @@ class CCManager2PL : public CCManager {
               m->blocked_locks.inc();
             }
           });
+#endif
       }
     }
     if (state == 2 || share) {
       measure_ctx* m = ctx->_measure_ctx;
       m->cc_time.stop();
       m->reused_locks.inc();
+#ifdef NO_THEN
+      return VFuture();
+#else
+
+#ifdef NO_THREAD
+      return folly::makeFuture();
+#else
       return folly::makeFuture().via(folly::getGlobalCPUExecutor());
+#endif
+#endif
     }
     ctx->_measure_ctx->used_locks.inc();
     auto f = _locks->GetLock(hashed).UpgradeAsync(ctx);
@@ -113,7 +178,24 @@ class CCManager2PL : public CCManager {
       ctx->_measure_ctx->cc_time.stop();
       return VFuture();
     } else {
+#ifdef NO_THEN
+      f.wait().value();
+      ctx->_lock_history[hashed] = share;
+      {
+        measure_ctx* m = ctx->_measure_ctx;
+        m->cc_time.stop();
+        m->lock_block_time.stop(m->cc_time.start_point);
+        m->blocked_locks.inc();
+      }
+      return VFuture();
+#else
+
+#ifdef NO_THREAD
+      f.wait().value();
+      return VFuture()
+#else
       return std::move(f).via(folly::getGlobalCPUExecutor())
+#endif
         .thenValue([this, hashed, share, ctx](folly::Unit){
           ctx->_lock_history[hashed] = share;
           {
@@ -123,6 +205,7 @@ class CCManager2PL : public CCManager {
             m->blocked_locks.inc();
           }
         });
+#endif
     }
   }
   VFuture GrantAccessNProp(
@@ -156,6 +239,10 @@ class CCManager2PL : public CCManager {
       CCContex* ctx) {
     // share on node
     Node* node = _node_index->GetNodeViaInternalId(inner_id);
+#ifdef NO_THEN
+    GrantAccessNProp(node->_external_id, true, ctx);
+    return node;
+#else
     return GrantAccessNProp(node->_external_id, true, ctx).thenValue([this, inner_id, ctx, node](folly::Unit)->Node*{
       // Node* node = _node_index->GetNodeViaInternalId(inner_id);
       if (ctx->_org_nodes.find(inner_id) != ctx->_org_nodes.end()) {
@@ -163,12 +250,18 @@ class CCManager2PL : public CCManager {
       }
       return node;
     });
+#endif
   }
   Future<Node*> GetNodeViaLabeledId(
       const label_t label, const labeled_id_t labeled_id,
       CCContex* ctx) {
     // share on node
     // LOG_VERBOSE("get node via labeled id: label=%d,id.label=%d, id.id=%llu", label, labeled_id.label, labeled_id.id);
+#ifdef NO_THEN
+    GrantAccessNProp(labeled_id, true, ctx);
+    Node* node = _node_index->GetNodeViaLabeledId(label, labeled_id);
+    return node;
+#else
     return GrantAccessNProp(labeled_id, true, ctx).thenValue([this, label, labeled_id, ctx](folly::Unit)->Node*{
       Node* node = _node_index->GetNodeViaLabeledId(label, labeled_id);
       if (node == nullptr) return nullptr;
@@ -177,11 +270,24 @@ class CCManager2PL : public CCManager {
       }
       return node;
     });
+#endif
   }
   Future<Node*> AccessNode(
       Node* node, const bool share,
       CCContex* ctx) {
     // share/exclusive on node
+#ifdef NO_THEN
+    GrantAccessNProp(node->_external_id, share, ctx);
+    internal_id_t inner_id = node->_internal_id;
+    if (ctx->_org_nodes.find(inner_id) != ctx->_org_nodes.end()) {
+      return node;
+    }
+    if (share) return node;
+    Node* backup = (Node*)_allocator->Alloc(node->_type);
+    memcpy(backup, node, _schema->get_prop_size(node->_type) + sizeof(Node));
+    ctx->_org_nodes[inner_id] = backup;
+    return node;
+#else
     return GrantAccessNProp(node->_external_id, share, ctx)
       .thenValue([this, inner_id=node->_internal_id, ctx, node, share](folly::Unit)->Node*{
         if (ctx->_org_nodes.find(inner_id) != ctx->_org_nodes.end()) {
@@ -193,11 +299,23 @@ class CCManager2PL : public CCManager {
         ctx->_org_nodes[inner_id] = backup;
         return node;
       });
+#endif
   }
   Future<Node*> InsertNode(
       label_t label, labeled_id_t external_id,
       CCContex* ctx) {
     // exclusive on node
+#ifdef NO_THEN
+    GrantAccessNProp(external_id, false, ctx);
+    bool created;
+    Node* n = _node_index->TouchNode(label, external_id, created);
+    if (!created) throw AbortException("key exists");
+    if (ctx->_org_nodes.find(n->_internal_id) != ctx->_org_nodes.end()) {
+      return n;
+    }
+    ctx->_org_nodes[n->_internal_id] = nullptr;
+    return n;
+#else
     return GrantAccessNProp(external_id, false, ctx)
       .thenValue([this, ctx, external_id, label](folly::Unit)->Node*{
         bool created;
@@ -211,11 +329,24 @@ class CCManager2PL : public CCManager {
         ctx->_org_nodes[n->_internal_id] = nullptr;
         return n;
       });
+#endif
   }
   Future<Node*> UpdateNodeViaLabeledId(
       const label_t label, const labeled_id_t external_id,
       CCContex* ctx) {
     // exclusive on node
+#ifdef NO_THEN
+    GrantAccessNProp(external_id, false, ctx);
+    Node* n = _node_index->GetNodeViaLabeledId(label, external_id);
+    if (n == nullptr) throw AbortException("key not exist");
+    if (ctx->_org_nodes.find(n->_internal_id) != ctx->_org_nodes.end()) {
+      return n;
+    }
+    Node* backup = (Node*)_allocator->Alloc(n->_type);
+    memcpy(backup, n, _schema->get_prop_size(n->_type) + sizeof(Node));
+    ctx->_org_nodes[n->_internal_id] = backup;
+    return n;
+#else
     return GrantAccessNProp(external_id, false, ctx)
       .thenValue([this, ctx, external_id, label](folly::Unit)->Node*{
         Node* n = _node_index->GetNodeViaLabeledId(label, external_id);
@@ -228,11 +359,24 @@ class CCManager2PL : public CCManager {
         ctx->_org_nodes[n->_internal_id] = backup;
         return n;
       });
+#endif
   }
   Future<Node*> UpdateNodeViaInternalId(
       const internal_id_t inner_id,
       CCContex* ctx) {
     // exclusive on node
+#ifdef NO_THEN
+    Node* n = _node_index->GetNodeViaInternalId(inner_id);
+    if (n == nullptr) throw FatalException("internal key not exist");
+    GrantAccessNProp(n->_external_id, false, ctx);
+    if (ctx->_org_nodes.find(n->_internal_id) != ctx->_org_nodes.end()) {
+      return n;
+    }
+    Node* backup = (Node*)_allocator->Alloc(n->_type);
+    memcpy(backup, n, _schema->get_prop_size(n->_type) + sizeof(Node));
+    ctx->_org_nodes[n->_internal_id] = backup;
+    return n;
+#else
     Node* node = _node_index->GetNodeViaInternalId(inner_id);
     if (node == nullptr) throw FatalException("internal key not exist");
     return GrantAccessNProp(node->_external_id, false, ctx)
@@ -245,12 +389,57 @@ class CCManager2PL : public CCManager {
         ctx->_org_nodes[n->_internal_id] = backup;
         return n;
       });
+#endif
   }
   Future<Node*> DeleteNodeViaLabeledId(
       const label_t label, const labeled_id_t ex_id,
       CCContex* ctx) {
     // exclusive on node
     auto n_ptr = std::make_shared<Node*>(nullptr);
+#ifdef NO_THEN
+    GrantAccessNProp(ex_id, false, ctx);
+    *n_ptr = _node_index->GetNodeViaLabeledId(label, ex_id);
+    if (*n_ptr == nullptr) throw AbortException("Node not exist");
+    for (label_t l = _schema->get_min_edge_label(); l <= _schema->get_max_label(); l++) {
+      GrantAccessAdjIdx(l, ex_id, dir_out, false, ctx);
+      GrantAccessAdjIdx(l, ex_id, dir_in, false, ctx);
+    }
+    auto outs = std::make_shared<std::unordered_map<label_t, std::vector<Edge*>>>();
+    auto ins = std::make_shared<std::unordered_map<label_t, std::vector<Edge*>>>();
+    for (label_t l = _schema->get_min_edge_label(); l <= _schema->get_max_label(); l++) {
+      (*outs)[l]={}; (*ins)[l] = {};
+      _edge_index->GetAllEdge(l, (*n_ptr)->_internal_id, dir_out, outs->at(l));
+      _edge_index->GetAllEdge(l, (*n_ptr)->_internal_id, dir_in, ins->at(l));
+      for (Edge* e : outs->at(l)) {
+        GrantAccessEProp(e->_label, e->_external_id1, e->_external_id2, false, ctx);
+      }
+      for (Edge* e : ins->at(l)) {
+        GrantAccessEProp(e->_label, e->_external_id1, e->_external_id2, false, ctx);
+      }
+    }
+    Node* n = _node_index->DeleteNode(label, ex_id);
+    if (n == nullptr) throw AbortException("Node not exist");
+    if (ctx->_org_nodes.find(n->_internal_id) == ctx->_org_nodes.end()) {
+      ctx->_org_nodes[n->_internal_id] = n;
+    }
+    for (label_t l = _schema->get_min_edge_label(); l <= _schema->get_max_label(); l++) {
+      for (Edge* e : outs->at(l)) {
+        if (ctx->_org_edges.find(std::make_tuple(l, e->_internal_id1, e->_internal_id2)) == ctx->_org_edges.end()) {
+          ctx->_org_edges[std::make_tuple(l, e->_internal_id1, e->_internal_id2)] = e;
+        }
+      }
+      for (Edge* e : ins->at(l)) {
+        if (ctx->_org_edges.find(std::make_tuple(l, e->_internal_id1, e->_internal_id2)) == ctx->_org_edges.end()) {
+          ctx->_org_edges[std::make_tuple(l, e->_internal_id1, e->_internal_id2)] = e;
+        }
+      }
+      outs->at(l).clear(); outs->at(l).shrink_to_fit();
+      ins->at(l).clear(); ins->at(l).shrink_to_fit();
+      // do not recycle these edge, since we are directly storing them as backup
+      _edge_index->DeleteAllEdge(l, n->_internal_id, false);
+    }
+    return nullptr;
+#else
     auto f = GrantAccessNProp(ex_id, false, ctx);
     f = std::move(f).thenValue([this, n_ptr, label, ex_id](folly::Unit){
       *n_ptr = _node_index->GetNodeViaLabeledId(label, ex_id);
@@ -319,6 +508,7 @@ class CCManager2PL : public CCManager {
     });
     
     return std::move(f).thenValue([](folly::Unit)->Node*{return nullptr;});
+#endif
     // exclusive on adj index
     // exclusive on adj edge
   }
@@ -336,6 +526,10 @@ class CCManager2PL : public CCManager {
     // share on edge
     Node* n1 = _node_index->GetNodeViaInternalId(in_id1), *n2 = _node_index->GetNodeViaInternalId(in_id2);
     if (n1 == nullptr || n2 == nullptr) throw FatalException("Internal id does not exist");
+#ifdef NO_THEN
+    GrantAccessEProp(label, n1->_external_id, n2->_external_id, true, ctx);
+    return _edge_index->GetEdge(label, in_id1, in_id2);
+#else
     return GrantAccessEProp(label, n1->_external_id, n2->_external_id, true, ctx).thenValue([this, label, in_id1, in_id2, ctx](folly::Unit)->Edge*{
       Edge* e = _edge_index->GetEdge(label, in_id1, in_id2);
       if (ctx->_org_edges.find(std::make_tuple(label, in_id1, in_id2)) != ctx->_org_edges.end()) {
@@ -343,6 +537,7 @@ class CCManager2PL : public CCManager {
       }
       return e;
     });
+#endif
   }
   Future<Edge*> GetEdgeViaLabeledId(
       const label_t label, const labeled_id_t ex_id1, const labeled_id_t ex_id2,
@@ -350,6 +545,14 @@ class CCManager2PL : public CCManager {
     // share on edge
     // auto in_id_ptr = std::make_shared<std::tuple<internal_id_t, internal_id_t>>();
     if (ex_id1.label == 0 || ex_id2.label == 0) throw FatalException("query using labeled_id, but the label is zero.");
+#ifdef NO_THEN
+    GrantAccessEProp(label, ex_id1, ex_id2, true, ctx);
+    Node* n1 = _node_index->GetNodeViaLabeledId(ex_id1),
+        * n2 = _node_index->GetNodeViaLabeledId(ex_id2);
+    if (n1 == nullptr || n2 == nullptr) return nullptr;
+    internal_id_t in_id1 = n1->_internal_id, in_id2 = n2->_internal_id;
+    return _edge_index->GetEdge(label, in_id1, in_id2);
+#else
     auto f = GrantAccessEProp(label, ex_id1, ex_id2, true, ctx).thenValue([this, label, ex_id1, ex_id2, ctx](folly::Unit)->Edge*{
       Node* n1 = _node_index->GetNodeViaLabeledId(ex_id1), 
           * n2 = _node_index->GetNodeViaLabeledId(ex_id2);
@@ -362,6 +565,7 @@ class CCManager2PL : public CCManager {
       return e;
     });
     return f;
+#endif
   }
   // Future<Edge*> InsertEdgeViaInternalId(
   //     label_t label, internal_id_t in_id1, internal_id_t in_id2,
@@ -397,6 +601,31 @@ class CCManager2PL : public CCManager {
       CCContex* ctx) {
     // exclusive on edge
     // the node must be locked, otherwise it may not exist, but the edge is still successfully inserted.
+#ifdef NO_THEN
+    GrantAccessNProp(ex_id1, true, ctx);
+    GrantAccessNProp(ex_id2, true, ctx);
+    GrantAccessEProp(label, ex_id1, ex_id2, false, ctx);
+    GrantAccessAdjIdx(label, ex_id1, dir_out, false, ctx);
+    GrantAccessAdjIdx(label, ex_id2, dir_in, false, ctx);
+    Node* n1 = _node_index->GetNodeViaLabeledId(ex_id1), 
+        * n2 = _node_index->GetNodeViaLabeledId(ex_id2);
+    if (n1 == nullptr || n2 == nullptr) throw AbortException("Insert edge, but the node does not exists");
+    bool created;
+    internal_id_t in_id1 = n1->_internal_id, in_id2 = n2->_internal_id;
+    Edge* e = _edge_index->TouchEdge(label, in_id1, in_id2, created);
+    if (!created) {
+      throw AbortException("edge exists");
+    }
+    e->_label = label;e->_internal_id1 = in_id1; e->_internal_id2 = in_id2;
+    e->_external_id1 = n1->_external_id; e->_external_id2 = n2->_external_id;
+    // todo: more elegent
+    e->_node1 = n1; e->_node2 = n2;
+    if (ctx->_org_edges.find(std::make_tuple(label, in_id1, in_id2)) != ctx->_org_edges.end()) {
+      return e;
+    }
+    ctx->_org_edges[std::make_tuple(label, in_id1, in_id2)] = nullptr;
+    return e;
+#else
     auto f = folly::makeFuture();
     return std::move(f).thenValue([this, ctx, ex_id1](folly::Unit){
       return GrantAccessNProp(ex_id1, true, ctx);
@@ -429,12 +658,55 @@ class CCManager2PL : public CCManager {
       ctx->_org_edges[std::make_tuple(label, in_id1, in_id2)] = nullptr;
       return e;
     });
+#endif
   }
   Future<std::tuple<Edge*, bool>> UpsertEdge(
       label_t label, labeled_id_t ex_id1, labeled_id_t ex_id2,
       CCContex* ctx) {
     // exclusive on edge
     // the node must be locked, otherwise it may not exist, but the edge is still successfully inserted.
+
+#ifdef NO_THEN
+    GrantAccessEProp(label, ex_id1, ex_id2, false, ctx);
+    Node* n1 = _node_index->GetNodeViaLabeledId(ex_id1), *n2 = _node_index->GetNodeViaLabeledId(ex_id2);
+    if (n1 == nullptr || n2 == nullptr) throw AbortException("Insert edge, but the node does not exists");
+    Edge* e = _edge_index->GetEdge(label, n1->_internal_id, n2->_internal_id);
+    if (e != nullptr) {
+      // the update case
+      if (ctx->_org_edges.find(std::make_tuple(label, n1->_internal_id, n2->_internal_id)) != ctx->_org_edges.end()) {
+        return std::make_tuple(e, false);
+      }
+      Edge* backup = (Edge*)_allocator->Alloc(e->_label);
+      memcpy(backup, e, _schema->get_prop_size(e->_label) + sizeof(Edge));
+      ctx->_org_edges[std::make_tuple(label, n1->_internal_id, n2->_internal_id)] = backup;
+      return std::make_tuple(e, false);
+    } else {
+      // the insert case
+      GrantAccessNProp(ex_id1, true, ctx);
+      GrantAccessNProp(ex_id2, true, ctx);
+      GrantAccessAdjIdx(label, ex_id1, dir_out, false, ctx);
+      GrantAccessAdjIdx(label, ex_id2, dir_in, false, ctx);
+      // exclusive on adj index
+      Node* n1 = _node_index->GetNodeViaLabeledId(ex_id1), 
+          * n2 = _node_index->GetNodeViaLabeledId(ex_id2);
+      if (n1 == nullptr || n2 == nullptr) throw AbortException("Insert edge, but the node does not exists");
+      bool created;
+      internal_id_t in_id1 = n1->_internal_id, in_id2 = n2->_internal_id;
+      Edge* e = _edge_index->TouchEdge(label, in_id1, in_id2, created);
+      if (!created) {
+        throw FatalException("impossible to reach");
+      }
+      e->_label = label;e->_internal_id1 = in_id1; e->_internal_id2 = in_id2;
+      e->_external_id1 = n1->_external_id; e->_external_id2 = n2->_external_id;
+      // todo: more elegent
+      e->_node1 = n1; e->_node2 = n2;
+      if (ctx->_org_edges.find(std::make_tuple(label, in_id1, in_id2)) != ctx->_org_edges.end()) {
+        return std::make_tuple(e, true);
+      }
+      ctx->_org_edges[std::make_tuple(label, in_id1, in_id2)] = nullptr;
+      return std::make_tuple(e, true);
+    }
+#else
     auto f = folly::makeFuture();
     return std::move(f).thenValue([this, ctx, ex_id1 ,ex_id2, label](folly::Unit){
       return GrantAccessEProp(label, ex_id1, ex_id2, false, ctx);
@@ -484,12 +756,27 @@ class CCManager2PL : public CCManager {
         });
       }
     });
+#endif
 
   }
   Future<Edge*> UpdateEdge(
       const label_t label, const labeled_id_t ex_id1, const labeled_id_t ex_id2,
       CCContex* ctx) {
     // exclusive on edge
+#ifdef NO_THEN
+    GrantAccessEProp(label, ex_id1, ex_id2, false, ctx);
+    Node* n1 = _node_index->GetNodeViaLabeledId(ex_id1), *n2 = _node_index->GetNodeViaLabeledId(ex_id2);
+    if (n1 == nullptr || n2 == nullptr) throw FatalException("insert edge, but node id does not exist");
+    Edge* e = _edge_index->GetEdge(label, n1->_internal_id, n2->_internal_id);
+    if (e == nullptr) throw AbortException("key not exist");
+    if (ctx->_org_edges.find(std::make_tuple(label, n1->_internal_id, n2->_internal_id)) != ctx->_org_edges.end()) {
+      return e;
+    }
+    Edge* backup = (Edge*)_allocator->Alloc(e->_label);
+    memcpy(backup, e, _schema->get_prop_size(e->_label) + sizeof(Edge));
+    ctx->_org_edges[std::make_tuple(label, n1->_internal_id, n2->_internal_id)] = backup;
+    return e;
+#else
     return GrantAccessEProp(label, ex_id1, ex_id2, false, ctx)
       .thenValue([this, ctx, ex_id1, ex_id2, label](folly::Unit)->Edge*{
         Node* n1 = _node_index->GetNodeViaLabeledId(ex_id1), *n2 = _node_index->GetNodeViaLabeledId(ex_id2);
@@ -504,10 +791,27 @@ class CCManager2PL : public CCManager {
         ctx->_org_edges[std::make_tuple(label, n1->_internal_id, n2->_internal_id)] = backup;
         return e;
       });
+#endif
   }
   Future<Edge*> DeleteEdge(
       const label_t label, const labeled_id_t ex_id1, const labeled_id_t ex_id2,
       CCContex* ctx) {
+#ifdef NO_THEN
+    // exclusive on edge
+    GrantAccessEProp(label, ex_id1, ex_id2, false, ctx);
+    GrantAccessAdjIdx(label, ex_id1, dir_out, false, ctx);
+    GrantAccessAdjIdx(label, ex_id2, dir_in, false, ctx);
+    // exclusive on adj index
+    Node* n1 = _node_index->GetNodeViaLabeledId(ex_id1), *n2 = _node_index->GetNodeViaLabeledId(ex_id2);
+    if (n1 == nullptr || n2 == nullptr) throw FatalException("Internal id does not exist");
+    Edge* e = _edge_index->DeleteEdge(label, n1->_internal_id, n2->_internal_id);
+    if (e == nullptr) throw AbortException("key not exist");
+    if (ctx->_org_edges.find(std::make_tuple(label, n1->_internal_id, n2->_internal_id)) != ctx->_org_edges.end()) {
+      return nullptr;
+    }
+    ctx->_org_edges[std::make_tuple(label, n1->_internal_id, n2->_internal_id)] = e;
+    return nullptr;
+#else
     // exclusive on edge
     return GrantAccessEProp(label, ex_id1, ex_id2, false, ctx)
     // exclusive on adj index
@@ -529,6 +833,7 @@ class CCManager2PL : public CCManager {
         ctx->_org_edges[std::make_tuple(label, n1->_internal_id, n2->_internal_id)] = e;
         return nullptr;
       });
+#endif
   }
 
   Future<sptr<vec<Edge*>>> GetAllEdge(
@@ -538,6 +843,14 @@ class CCManager2PL : public CCManager {
     Node* n = _node_index->GetNodeViaInternalId(in_id);
     if (n == nullptr) throw FatalException("Internal id does not exist");
     auto edge_list = std::make_shared<std::vector<Edge*>>();
+#ifdef NO_THEN
+    GrantAccessAdjIdx(label, n->_external_id, dir, true, ctx);
+    _edge_index->GetAllEdge(label, in_id, dir, *edge_list);
+    for (Edge* e : *edge_list) {
+      GrantAccessEProp(e->_label, e->_external_id1, e->_external_id2, true, ctx);
+    }
+    return edge_list;
+#else
     auto f = GrantAccessAdjIdx(label, n->_external_id, dir, true, ctx)
       .thenValue([this, label, in_id, dir, ctx, edge_list](folly::Unit){
         _edge_index->GetAllEdge(label, in_id, dir, *edge_list);
@@ -553,6 +866,7 @@ class CCManager2PL : public CCManager {
         return edge_list;
       });
     return f;
+#endif
   }
   Future<sptr<vec<Node*>>> GetAllNeighbour(
       const label_t label, const internal_id_t in_id, const dir_t dir,
@@ -562,6 +876,14 @@ class CCManager2PL : public CCManager {
     if (n == nullptr) throw FatalException("Internal id does not exist");
     // LOG_VERBOSE("get all neighbour of label=%d, ex_id=%d, in_id=%llu,", label, n->_external_id.id, in_id.id);
     auto node_list = std::make_shared<std::vector<Node*>>();
+#ifdef NO_THEN
+    GrantAccessAdjIdx(label, n->_external_id, dir, true, ctx);
+    _edge_index->GetAllNeighbour(label, in_id, dir, *node_list);
+    for (Node* n : *node_list) {
+      GrantAccessNProp(n->_external_id, true, ctx);
+    }
+    return node_list;
+#else
     return GrantAccessAdjIdx(label, n->_external_id, dir, true, ctx)
       .thenValue([this, label, in_id, dir, ctx, node_list](folly::Unit){
         _edge_index->GetAllNeighbour(label, in_id, dir, *node_list);
@@ -576,6 +898,7 @@ class CCManager2PL : public CCManager {
       }).thenValue([node_list](folly::Unit){
         return node_list;
       });
+#endif
   }
   bool CommitCheck(CCContex* ctx) {
     return true;

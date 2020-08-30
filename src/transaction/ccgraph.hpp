@@ -10,17 +10,18 @@
 #include <folly/futures/Future.h>
 
 class CCGraph {
- private:
-  using VFuture=folly::Future<folly::Unit>;
-  using VPromise=folly::Promise<folly::Unit>;
+ public:
+  using VFuture = CCManager2PL::VFuture;
+  using VPromise = CCManager2PL::VPromise;
   template<typename T>
-  using Future=folly::Future<T>;
+  using Future = CCManager2PL::Future<T>;
   template<typename T>
-  using Promise=folly::Promise<T>;
+  using Promise = CCManager2PL::Promise<T>;
   template<typename T>
   using vec=std::vector<T>;
   template<typename T>
   using sptr=std::shared_ptr<T>;
+ private:
 
   CCManager2PL* _cc_manager;
  public:
