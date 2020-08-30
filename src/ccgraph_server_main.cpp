@@ -63,6 +63,9 @@ class CCGraphServerImpl final : public CCGraphRPC::CCGraphServer::Service {
         response->add_measure(m_ctx->reused_locks.collect);
         response->add_measure(m_ctx->blocked_locks.collect);
         response->add_measure(m_ctx->retries.collect);
+        for (auto & step_m : m_ctx->step_times) {
+          response->add_measure(step_m.collect);
+        }
         delete m_ctx;
         return Status::OK;
       }

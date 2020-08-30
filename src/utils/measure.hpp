@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <chrono>
+#include <vector>
 
 struct measure_item {
   uint64_t collect = 0;
@@ -25,6 +26,8 @@ struct measure_ctx {
   measure_item cc_time;
 
   measure_item txn_time;
+
+  std::vector<measure_item> step_times;;
 
   measure_item used_locks;
   measure_item reused_locks;

@@ -187,7 +187,14 @@ class PlacePropColBack : public QueryStep {
   // void set_prev(std::vector<QueryStep*> prevs) { _prev = prevs[0]; }
   // QueryStep* get_next(const size_t idx) { return _nexts.at(idx); }
 };
-
+struct ColDesc {
+  enum ColDescType {
+    kTableCol = 0,
+    kPropIdx = 1,
+  };
+  size_t col, prop_idx;
+  ColDescType type;
+};
 class AlgeoStep : public QueryStep {
  private:
   // QueryStep* _prevs[2];
@@ -195,6 +202,8 @@ class AlgeoStep : public QueryStep {
   // size_t _col_to_put;
  public:
   MathOp _op;
+  bool _use_col_desc = false;
+  ColDesc _src_cols_desc[2], _dst_col_desc;
   OperatorType get_type() { return OperatorType::kAlgeo; }
   size_t get_prev_count() { return 2; }
   size_t get_dst_col_count() { return 1; }

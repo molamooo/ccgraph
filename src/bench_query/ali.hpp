@@ -44,10 +44,11 @@ class AliLogin {
       .filter_simple([](ResultItem v){return v != 0;}, "start_person_node")
       // fix: the original ldbc result contains the start node. this is wrong, but we need to be the same
       .get_neighbour_varlen(Edge_L, dir_out, 0, std::numeric_limits<uint64_t>::max(), "start_person_node", {"friend_node", "depth"}) // done: both direction
-      .place_prop(_schema->get_prop_idx(Node_L, "version"), Result::kUINT64, "friend_node", "version")
-      .algeo(MathOp::kAdd, const_1, {"version", "1"}, "updated_version")
       .update_node(Node_L, "friend_node", "node_to_write")
-      .place_prop_back(Node_L, "version", Result::kUINT64, "updated_version", "node_to_write")
+      // .place_prop(_schema->get_prop_idx(Node_L, "version"), Result::kUINT64, "node_to_write", "version")
+      // .algeo(MathOp::kAdd, const_1, {"version", "1"}, "updated_version")
+      // .place_prop_back(Node_L, "version", Result::kUINT64, "updated_version", "node_to_write")
+      .algeo(MathOp::kAdd, const_1, {"node_to_write", "1"}, _schema->get_prop_idx(Node_L, "version"))
       .select_group(
         {}, 
         {"friend_node"}, 

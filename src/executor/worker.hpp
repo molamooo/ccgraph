@@ -715,6 +715,72 @@ class Worker {
       }
     }
   }
+  ResultItem extract_item(Result & rst, size_t i, ColDesc & col_desc) {
+    ResultItem item = 0;
+    if (col_desc.type == ColDesc::kTableCol) {
+      return rst.get(i, col_desc.col);
+    } else if (col_desc.type == ColDesc::kPropIdx) {
+      if (rst.get_type(col_desc.col) == Result::kNode) {
+        Node* n = (Node*)rst.get(i, col_desc.col);
+        if (n != nullptr) {
+          _schema->get_prop(n->_prop, n->_type, col_desc.prop_idx, (uint8_t*)&item);
+        }
+      } else if (rst.get_type(col_desc.col) == Result::kEdge) {
+        Edge* e = (Edge*)rst.get(i, col_desc.col);
+        if (e != nullptr) {
+          _schema->get_prop(e->_prop, e->_label, col_desc.prop_idx, (uint8_t*)&item);
+        }
+      } else {
+        throw QueryException("prop must belong to node or edge");
+      }
+    } else {
+      throw QueryException("unknown col desc type");
+    }
+    return item;
+  }
+  Result::ColumnType extract_ty(Result & rst, ColDesc & col_desc) {
+    Result::ColumnType ty;
+    if (col_desc.type == ColDesc::kTableCol) {
+      return rst.get_type(col_desc.col);
+    } else if (col_desc.type == ColDesc::kPropIdx) {
+      if (rst.get_rows() == 0) throw QueryException("cannot know the prop type of an empty table");
+      if (rst.get_type(col_desc.col) == Result::kNode) {
+        Node* n = (Node*)rst.get(0, col_desc.col);
+        if (n == nullptr) throw Unimplemented("null ptr, unknown prop type");
+        return (Result::ColumnType)(_schema->get_prop_desc(n->_type, col_desc.prop_idx)._type);
+      } else if (rst.get_type(col_desc.col) == Result::kEdge) {
+        Edge* e = (Edge*)rst.get(0, col_desc.col);
+        if (e == nullptr) throw Unimplemented("null ptr, unknown prop type");
+        return (Result::ColumnType)(_schema->get_prop_desc(e->_label, col_desc.prop_idx)._type);
+      } else {
+        throw QueryException("prop must belong to node or edge");
+      }
+    } else {
+      throw QueryException("unknown col desc type");
+    }
+    return ty;
+  }
+  void place_item(Result & rst, const size_t i, const ColDesc & col_desc, const ResultItem val) {
+    if (col_desc.type == ColDesc::kTableCol) {
+      rst.set(i, col_desc.col, val);
+    } else if (col_desc.type == ColDesc::kPropIdx) {
+      if (rst.get_type(col_desc.col) == Result::kNode) {
+        Node* n = (Node*)rst.get(i, col_desc.col);
+        if (n != nullptr) {
+          _schema->set_prop(n->_prop, n->_type, col_desc.prop_idx, (uint8_t*)&val);
+        }
+      } else if (rst.get_type(col_desc.col) == Result::kEdge) {
+        Edge* e = (Edge*)rst.get(i, col_desc.col);
+        if (e != nullptr) {
+          _schema->set_prop(e->_prop, e->_label, col_desc.prop_idx, (uint8_t*)&val);
+        }
+      } else {
+        throw QueryException("prop must belong to node or edge");
+      }
+    } else {
+      throw QueryException("unknown col desc type");
+    }
+  }
   void ProcPlacePropCol(QueryStep* _step_) {
     auto step = dynamic_cast<PlacePropCol*>(_step_);
     Result & r  = step->get_rst();
@@ -761,8 +827,16 @@ class Worker {
     Result & r1 = step->get_prev(0)->get_rst();
     Result & r2 = step->get_prev(1)->get_rst();
     Result & r  = step->get_rst();
-    size_t col1 = step->get_src_col(0), col2 = step->get_src_col(1);
-    Result::ColumnType ty1 = r1.get_type(col1), ty2 = r2.get_type(col2);
+    // size_t col1 = step->get_src_col(0), col2 = step->get_src_col(1);
+    if (r1.get_rows() == 0 || r2.get_rows() == 0) return;
+    ColDesc src_col1 = step->_src_cols_desc[0], src_col2 = step->_src_cols_desc[1];
+    ColDesc dst_col = step->_dst_col_desc;
+    if (step->_use_col_desc == false) {
+      src_col1.col = step->get_src_col(0); src_col1.type = ColDesc::kTableCol;
+      src_col2.col = step->get_src_col(1); src_col2.type = ColDesc::kTableCol;
+      dst_col.col = step->get_col_to_put(); dst_col.type = ColDesc::kTableCol;
+    }
+
     bool prev1_single = (r1.get_rows() == 1), 
          prev2_single = (r2.get_rows() == 1);
     if (!prev1_single && !prev2_single) {
@@ -772,11 +846,14 @@ class Worker {
     }
     size_t n_rows = std::max(r1.get_rows(),  r2.get_rows());
 
-    ResultItem v1 = r1.get(0, col1), v2 = r2.get(0, col2);
+    Result::ColumnType ty1 = extract_ty(r1, src_col1), ty2 = extract_ty(r2, src_col2);
+    ResultItem v1 = extract_item(r1, 0, src_col1), v2 = extract_item(r2, 0, src_col2);
     for (size_t i = 0; i < n_rows; i++) {
-      if (!prev1_single) v1 = r1.get(i, col1);
-      if (!prev2_single) v2 = r2.get(i, col2);
-      r.set(i, step->get_col_to_put(0), algeo_item(v1, v2, ty1, ty2, step->_op));
+      if (!prev1_single) v1 = extract_item(r1, i, src_col1);
+      if (!prev2_single) v2 = extract_item(r2, i, src_col2);
+      ResultItem rst = algeo_item(v1, v2, ty1, ty2, step->_op);
+      place_item(r, i, dst_col, rst);
+      // r.set(i, step->get_col_to_put(0), algeo_item(v1, v2, ty1, ty2, step->_op));
     }
   }
   VFuture ProcGetNode(QueryStep* _step_) {
@@ -1526,7 +1603,8 @@ class Worker {
     return f;
   }
   VFuture ProcessStepRecursive(QueryStep* step) {
-
+    step->get_cc_ctx()->_measure_ctx->step_times.emplace_back();
+    step->get_cc_ctx()->_measure_ctx->step_times.back().start();
 #ifdef NO_THEN
     ProcessOneStep(step).get();
 #else
@@ -1537,6 +1615,7 @@ class Worker {
 #endif
       .thenValue([this, step](folly::Unit){
 #endif
+        step->get_cc_ctx()->_measure_ctx->step_times.back().stop();
         if (Config::get()->print_mid_rst) {
           LOG_VERBOSE("printing mid result");
           step->get_rst().print();
@@ -1576,10 +1655,12 @@ class Worker {
       _ccgraph->Abort(q->get_cc_ctx());
       q->_rc = kConflict;
       q->_abort_msg = e.what();
+      q->get_cc_ctx()->_measure_ctx->step_times.back().stop();
     } catch (AbortException & e) {
       _ccgraph->Abort(q->get_cc_ctx());
       q->_rc = kAbort;
       q->_abort_msg = e.what();
+      q->get_cc_ctx()->_measure_ctx->step_times.back().stop();
     }
     return VFuture();
 #else

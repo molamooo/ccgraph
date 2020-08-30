@@ -41,6 +41,7 @@ struct StepCtx {
   StepCtx get_single_edge(label_t label, dir_t dir, std::vector<std::string> src_col_alias, std::string dst_col_alias="");
 
   // StepCtx algeo(StepCtx & oprand2, size_t src_col2, MathOp op, StepCtx* col_src = nullptr, std::string dst_col_alias="");
+  StepCtx algeo(MathOp op, StepCtx & oprand2, std::vector<std::string> src_col_alias, size_t src1_prop_idx);
   StepCtx algeo(MathOp op, StepCtx & oprand2, std::vector<std::string> src_col_alias, std::string dst_col_alias="");
   StepCtx algeo(MathOp op, std::vector<std::string> src_col_alias, std::string dst_col_alias="");
   StepCtx sort(std::vector<std::string> src_cols_alias, std::vector<bool> orders, uint64_t limit = UINT64_MAX, uint64_t skip = 0);
@@ -512,6 +513,36 @@ StepCtx StepCtx::algeo(MathOp op, StepCtx & oprand2, std::vector<std::string> sr
   step->set_col_to_put({col_to_put});
   // ctx._wrote_cols = {col_to_put};
 
+  step->_op = op;
+  return ctx;
+}
+
+StepCtx StepCtx::algeo(MathOp op, StepCtx & oprand2, std::vector<std::string> src_col_alias, size_t src1_prop_idx) {
+  // share the same result table
+  AlgeoStep* step = new AlgeoStep;
+  _builder->steps.push_back(step);
+  if (_builder->first_step == nullptr) _builder->first_step = step;
+  StepCtx ctx; ctx._step = step; ctx._step_id = this->_step_id++; ctx._builder = this->_builder;
+
+  step->set_rst(&this->_step->get_rst());
+  ColDesc src1_d, src2_d, dst_d;
+  src1_d.col = step->get_rst().get_col_idx_by_alias(src_col_alias.at(0));
+  src1_d.type = ColDesc::kPropIdx;
+  src2_d.col = oprand2._step->get_rst().get_col_idx_by_alias(src_col_alias.at(1));
+  src2_d.type = ColDesc::kTableCol;
+  dst_d = src1_d;
+
+  this->_step->append_next(step);
+  step->set_prev({this->_step, oprand2._step});
+
+  // step->set_src_col({src_col1, src_col2});
+  // step->set_col_to_put({col_to_put});
+  // ctx._wrote_cols = {col_to_put};
+
+  step->_use_col_desc = true;
+  step->_src_cols_desc[0] = src1_d;
+  step->_src_cols_desc[1] = src2_d;
+  step->_dst_col_desc = dst_d;
   step->_op = op;
   return ctx;
 }
