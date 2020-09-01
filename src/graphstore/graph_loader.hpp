@@ -15,7 +15,7 @@ class GraphLoader {
   LabelEdgeIndex* _edge_index;
   SchemaManager* _schema;
   std::function<RetCode(std::string, std::vector<std::string>)> _lambda;
-  bool do_txn = true;
+  bool do_txn = false;
 
 
   enum ColumnType {
